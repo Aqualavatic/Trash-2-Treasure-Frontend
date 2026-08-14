@@ -23,14 +23,12 @@ export function ArScanner({
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment")
   
-  // Trạng thái kết quả AR Real-time
   const [detectedResult, setDetectedResult] = useState<{
     wasteType: string
     category: string
     confidence?: number
   } | null>(null)
 
-  // Khởi động Camera
   useEffect(() => {
     let stream: MediaStream | null = null
     let isMounted = true
@@ -81,7 +79,7 @@ export function ArScanner({
     }
   }, [facingMode])
 
-  // HÀM GỬI FRAME NGẦM LÊN SERVER ĐỂ QUÉT REAL-TIME
+  // GỌI API RIÊNG CHO YOLO (SIÊU TỐC)
   const captureAndAutoScan = useCallback(async () => {
     if (!videoRef.current || isScanning || isLoading) return
     const video = videoRef.current
@@ -106,11 +104,10 @@ export function ArScanner({
           const file = new File([blob], "ar_autoscan.jpg", { type: "image/jpeg" })
           const formData = new FormData()
           formData.append("file", file)
-          formData.append("children_mode", String(childrenMode))
-          formData.append("lang", lang)
 
           try {
-            const response = await fetch(`${API_URL}/api/analyze`, {
+            // Gọi vào endpoint siêu tốc chuyên YOLO
+            const response = await fetch(`${API_URL}/api/ar-detect`, {
               method: "POST",
               body: formData,
             })
@@ -128,24 +125,24 @@ export function ArScanner({
               }
             }
           } catch (err) {
-            console.error("Lỗi tự động quét AR:", err)
+            console.error("Lỗi quét AR:", err)
           } finally {
             setIsScanning(false)
           }
-        }, "image/jpeg", 0.85)
+        }, "image/jpeg", 0.8)
       }
     } catch (e) {
       setIsScanning(false)
     }
-  }, [isScanning, isLoading, childrenMode, lang])
+  }, [isScanning, isLoading])
 
-  // CHẠY VÒNG LẶP TỰ ĐỘNG QUÉT MỖI 2.5 GIÂY
+  // Quét nhanh mỗi 1.5 giây vì YOLO phản hồi cực kỳ nhanh
   useEffect(() => {
     if (isLoading || errorMessage) return
 
     const interval = setInterval(() => {
       captureAndAutoScan()
-    }, 2500) // Cứ 2.5s quét 1 lần để không bị nghẽn mạng server
+    }, 1500) 
 
     return () => clearInterval(interval)
   }, [isLoading, errorMessage, captureAndAutoScan])
@@ -154,7 +151,7 @@ export function ArScanner({
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"))
   }
 
-  // Khi người dùng bấm vào khung AR đang nhận diện thành công để xem kết quả chính thức
+  // Khi bấm chọn, lúc này mới gọi Gemini phân tích sâu để lấy ý tưởng DIY chi tiết
   const handleLockAndSelect = () => {
     if (!videoRef.current) return
     const video = videoRef.current
@@ -178,7 +175,6 @@ export function ArScanner({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 backdrop-blur-md">
       <div className="relative flex h-full max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-950 shadow-2xl">
-        {/* Nút đóng */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 z-30 rounded-full bg-black/60 p-2.5 text-white hover:bg-black/80 transition-colors"
@@ -186,7 +182,6 @@ export function ArScanner({
           <X className="size-5" />
         </button>
 
-        {/* Nút đổi camera trước/sau */}
         <button
           onClick={toggleCamera}
           className="absolute top-4 left-4 z-30 rounded-full bg-black/60 p-2.5 text-white hover:bg-black/80 transition-colors"
@@ -217,19 +212,16 @@ export function ArScanner({
             </div>
           )}
 
-          {/* HIỆU ỨNG KHUNG AR OVERLAY REAL-TIME */}
           {!isLoading && !errorMessage && (
             <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center p-6">
               <div className={`relative w-72 h-72 rounded-3xl border-2 transition-all duration-300 ${
                 detectedResult ? "border-emerald-400 bg-emerald-500/10 shadow-[0_0_30px_rgba(52,211,153,0.5)]" : "border-dashed border-white/40 bg-white/5"
               }`}>
-                {/* 4 góc khung ngắm */}
                 <div className={`absolute -top-1 -left-1 size-5 border-t-4 border-l-4 rounded-tl-lg ${detectedResult ? "border-emerald-400" : "border-white"}`} />
                 <div className={`absolute -top-1 -right-1 size-5 border-t-4 border-r-4 rounded-tr-lg ${detectedResult ? "border-emerald-400" : "border-white"}`} />
                 <div className={`absolute -bottom-1 -left-1 size-5 border-b-4 border-l-4 rounded-bl-lg ${detectedResult ? "border-emerald-400" : "border-white"}`} />
                 <div className={`absolute -bottom-1 -right-1 size-5 border-b-4 border-r-4 rounded-br-lg ${detectedResult ? "border-emerald-400" : "border-white"}`} />
 
-                {/* Nhãn hiển thị kết quả AI ngay trên khung AR */}
                 {detectedResult ? (
                   <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-2xl bg-emerald-500 px-4 py-2 text-slate-950 font-bold shadow-xl animate-bounce">
                     <CheckCircle2 className="size-5" />
@@ -237,7 +229,7 @@ export function ArScanner({
                   </div>
                 ) : (
                   <div className="absolute -top-10 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white backdrop-blur-md">
-                    {isScanning ? "AI đang quét..." : "Đưa rác vào khung"}
+                    {isScanning ? "Đang quét..." : "Lia camera vào rác"}
                   </div>
                 )}
               </div>
@@ -245,11 +237,10 @@ export function ArScanner({
           )}
         </div>
 
-        {/* Thanh điều khiển đáy */}
         <div className="z-30 flex items-center justify-between gap-4 bg-slate-900 p-5 border-t border-slate-800">
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <Sparkles className="size-4 shrink-0 text-emerald-400" />
-            <span>{detectedResult ? "Đã nhận diện! Bấm để lấy ý tưởng" : "Lia camera vào rác để AI tự nhận diện"}</span>
+            <span>{detectedResult ? "Đã nhận diện! Bấm để lấy ý tưởng" : "Hệ thống YOLO đang tự động quét..."}</span>
           </div>
 
           <Button
