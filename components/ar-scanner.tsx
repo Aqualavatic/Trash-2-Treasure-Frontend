@@ -1,9 +1,8 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { X, Loader2, Sparkles, AlertCircle } from "lucide-react"
+import { X, Loader2, Sparkles, AlertCircle, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import * as THREE from "three"
 
 export function ArScanner({
   onClose,
@@ -12,115 +11,92 @@ export function ArScanner({
   onClose: () => void
   onAnalyzeFile: (file: File) => void
 }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [isLoadingMindAR, setIsLoadingMindAR] = useState(true)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [isCapturing, setIsCapturing] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment")
 
   useEffect(() => {
-    let mindarThree: any = null
+    let stream: MediaStream | null = null
+    let isMounted = true // Cờ chống lỗi duplicate render của React Strict Mode
 
-    const initAR = async () => {
+    const startCamera = async () => {
+      setIsLoading(true)
+      setErrorMessage(null)
+
       try {
-        if (!containerRef.current) return
-
-        // Gán THREE vào window để MindAR nhận diện đối tượng toàn cục
-        if (typeof window !== "undefined") {
-          ;(window as any).THREE = THREE
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Trình duyệt không hỗ trợ truy cập Camera!")
         }
 
-        // Import động module MindAR chỉ ở phía Client (tránh lỗi SSR & Turbopack build)
-        // @ts-ignore
-        await import("mind-ar-ts/dist/mindar-image-three.prod.js")
-
-        const MINDAR = (window as any).MINDAR
-        if (!MINDAR || !MINDAR.IMAGE || !MINDAR.IMAGE.MindARThree) {
-          throw new Error("Không thể tải đối tượng MindAR.IMAGE.MindARThree")
-        }
-
-        // 1. Khởi tạo MindAR Instance từ window global
-        mindarThree = new MINDAR.IMAGE.MindARThree({
-          container: containerRef.current,
-          imageTargetSrc:
-            "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/examples/image-tracking/assets/card-example/card.mind",
-          uiLoading: "no",
-          uiScanning: "no",
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: facingMode,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
         })
 
-        const { renderer, scene, camera } = mindarThree
-
-        // 2. Tạo khối 3D AR
-        const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5)
-        const material = new THREE.MeshBasicMaterial({ color: 0x10b981, wireframe: true })
-        const cube = new THREE.Mesh(geometry, material)
-
-        const anchor = mindarThree.addAnchor(0)
-        anchor.group.add(cube)
-
-        // 3. Khởi chạy AR Stream & Camera
-        await mindarThree.start()
-
-        // 4. CSS Fix: Đảm bảo Video/Canvas mở toàn màn hình
-        const videoElem = containerRef.current.querySelector("video")
-        if (videoElem) {
-          videoElem.style.position = "absolute"
-          videoElem.style.top = "0"
-          videoElem.style.left = "0"
-          videoElem.style.width = "100%"
-          videoElem.style.height = "100%"
-          videoElem.style.objectFit = "cover"
-          videoElem.style.zIndex = "0"
+        // Kiểm tra xem Component có còn mount trên màn hình không trước khi gán
+        if (videoRef.current && isMounted) {
+          videoRef.current.srcObject = stream
+          
+          try {
+            await videoRef.current.play()
+          } catch (playErr: any) {
+            // Bỏ qua AbortError do React Strict Mode ngắt luồng play giữa chừng
+            if (playErr.name !== "AbortError") {
+              throw playErr
+            }
+          }
         }
 
-        const canvasElem = containerRef.current.querySelector("canvas")
-        if (canvasElem) {
-          canvasElem.style.position = "absolute"
-          canvasElem.style.top = "0"
-          canvasElem.style.left = "0"
-          canvasElem.style.width = "100%"
-          canvasElem.style.height = "100%"
-          canvasElem.style.zIndex = "1"
-        }
-
-        setIsLoadingMindAR(false)
-
-        renderer.setAnimationLoop(() => {
-          cube.rotation.x += 0.01
-          cube.rotation.y += 0.01
-          renderer.render(scene, camera)
-        })
+        if (isMounted) setIsLoading(false)
       } catch (err: any) {
-        console.error("Lỗi khởi tạo AR:", err)
-        setErrorMessage("Không thể khởi động Camera. Vui lòng cấp quyền Camera trên trình duyệt!")
-        setIsLoadingMindAR(false)
+        console.error("Lỗi Camera:", err)
+        if (!isMounted) return
+
+        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+          setErrorMessage("Vui lòng cấp quyền truy cập Camera trên trình duyệt để quét!")
+        } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+          setErrorMessage("Không tìm thấy thiết bị Camera nào trên máy tính/điện thoại!")
+        } else if (err.name !== "AbortError") {
+          setErrorMessage("Không thể kết nối với Camera. Vui lòng thử lại!")
+        }
+        setIsLoading(false)
       }
     }
 
-    initAR()
+    startCamera()
 
     return () => {
-      if (mindarThree) {
-        try {
-          mindarThree.stop()
-        } catch (e) {
-          console.log("Stop AR stream", e)
-        }
+      isMounted = false
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop())
       }
     }
-  }, [])
+  }, [facingMode])
+
+  const toggleCamera = () => {
+    setFacingMode((prev) => (prev === "environment" ? "user" : "environment"))
+  }
 
   const handleCaptureAndAnalyze = () => {
+    if (!videoRef.current) return
     setIsCapturing(true)
-    const videoElem = containerRef.current?.querySelector("video")
 
-    if (videoElem) {
+    try {
+      const video = videoRef.current
       const canvas = document.createElement("canvas")
-      canvas.width = videoElem.videoWidth || 640
-      canvas.height = videoElem.videoHeight || 480
-      const ctx = canvas.getContext("2d")
+      canvas.width = video.videoWidth || 640
+      canvas.height = video.videoHeight || 480
 
+      const ctx = canvas.getContext("2d")
       if (ctx) {
-        ctx.drawImage(videoElem, 0, 0, canvas.width, canvas.height)
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        
         canvas.toBlob((blob) => {
           if (blob) {
             const file = new File([blob], "ar_capture.jpg", { type: "image/jpeg" })
@@ -128,18 +104,18 @@ export function ArScanner({
             onClose()
           }
           setIsCapturing(false)
-        }, "image/jpeg")
+        }, "image/jpeg", 0.95)
       }
-    } else {
+    } catch (e) {
+      console.error("Lỗi chụp ảnh:", e)
       setIsCapturing(false)
-      alert("Không tìm thấy luồng Camera!")
+      alert("Không thể chụp ảnh từ Camera!")
     }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 backdrop-blur-md">
       <div className="relative flex h-full max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-950 shadow-2xl">
-        {/* Nút Đóng */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 z-30 rounded-full bg-black/60 p-2.5 text-white hover:bg-black/80 transition-colors"
@@ -147,50 +123,69 @@ export function ArScanner({
           <X className="size-5" />
         </button>
 
-        {/* Khung Render MindAR Camera Live */}
-        <div ref={containerRef} className="relative flex-1 overflow-hidden bg-black w-full h-full">
-          {isLoadingMindAR && (
+        <button
+          onClick={toggleCamera}
+          className="absolute top-4 left-4 z-30 rounded-full bg-black/60 p-2.5 text-white hover:bg-black/80 transition-colors"
+          title="Đổi camera"
+        >
+          <RefreshCw className="size-5" />
+        </button>
+
+        <div className="relative flex-1 overflow-hidden bg-black w-full h-full flex items-center justify-center">
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            className="h-full w-full object-cover"
+          />
+
+          {isLoading && !errorMessage && (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-slate-900 text-white">
               <Loader2 className="size-8 animate-spin text-emerald-400" />
-              <p className="text-sm font-medium">Đang kết nối Camera AR...</p>
+              <p className="text-sm font-medium">Đang khởi động Camera AI...</p>
             </div>
           )}
 
           {errorMessage && (
-            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-slate-900 text-red-400 gap-2 text-sm">
-              <AlertCircle className="size-8" />
-              <span>{errorMessage}</span>
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-slate-900 text-red-400 gap-3 text-sm">
+              <AlertCircle className="size-10 text-red-500" />
+              <span className="font-semibold text-slate-200">{errorMessage}</span>
             </div>
           )}
 
-          {/* Vùng chỉ dẫn tâm ngắm AR */}
-          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
-            <div className="relative size-64 rounded-3xl border-2 border-dashed border-emerald-400/80 bg-emerald-500/5">
-              <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-bold text-slate-950 uppercase tracking-wider">
-                MindAR Live Scanner
-              </span>
+          {!isLoading && !errorMessage && (
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+              <div className="relative size-64 rounded-3xl border-2 border-dashed border-emerald-400/80 bg-emerald-500/10 backdrop-blur-[1px] animate-pulse">
+                <div className="absolute -top-1 -left-1 size-4 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg" />
+                <div className="absolute -top-1 -right-1 size-4 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg" />
+                <div className="absolute -bottom-1 -left-1 size-4 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg" />
+                <div className="absolute -bottom-1 -right-1 size-4 border-b-4 border-r-4 border-emerald-400 rounded-br-lg" />
+
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-bold text-slate-950 uppercase tracking-wider shadow-lg">
+                  AI Live Scanner
+                </span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Bảng công cụ bên dưới */}
         <div className="z-30 flex items-center justify-between gap-4 bg-slate-900 p-5 border-t border-slate-800">
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <Sparkles className="size-4 shrink-0 text-emerald-400" />
-            <span>Hướng camera vào rác và bấm Quét AI</span>
+            <span>Đưa rác vào khung hình và ấn Quét AI</span>
           </div>
 
           <Button
             onClick={handleCaptureAndAnalyze}
-            disabled={isLoadingMindAR || isCapturing}
-            className="gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-6"
+            disabled={isLoading || isCapturing || !!errorMessage}
+            className="gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-6 py-5 shadow-lg shadow-emerald-500/20"
           >
             {isCapturing ? (
               <Loader2 className="size-5 animate-spin" />
             ) : (
               <>
                 <Sparkles className="size-4" />
-                Quét AR ngay
+                Quét AI ngay
               </>
             )}
           </Button>

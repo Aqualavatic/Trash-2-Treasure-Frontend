@@ -8,4 +8,10 @@ declare module "mind-ar-ts/dist/mindar-image-three.prod.js" {
     scene: any;
     camera: any;
   }
+  export const THREE: any;
+  const defaultExport: {
+    MindARThree: typeof MindARThree;
+    THREE?: any;
+  };
+  export default defaultExport;
 }
