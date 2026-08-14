@@ -1,10 +1,16 @@
 "use client"
 
 import { useState, useRef } from "react"
+import dynamic from "next/dynamic"
 import { Camera, ImageUp, Leaf, Sparkles, Loader2, RefreshCw, Scan } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { Dict } from "@/lib/dictionary"
-import { ArScanner } from "@/components/ar-scanner"
+
+// Nạp động ArScanner và tắt SSR để đảm bảo không bị lỗi Render phía Server
+const ArScanner = dynamic(
+  () => import("@/components/ar-scanner").then((mod) => mod.ArScanner),
+  { ssr: false }
+)
 
 export function HeroUpload({
   t,
