@@ -12,6 +12,11 @@ import { dictionary, type Lang } from "@/lib/dictionary"
 
 type Suggestion = ComponentProps<typeof AiAnalysis>["suggestions"][number]
 
+// Lấy URL Backend từ biến môi trường Vercel, nếu không có sẽ tự động trỏ về Railway
+const API_BASE_URL = 
+  process.env.NEXT_PUBLIC_API_URL || 
+  "https://trash-to-treasure-backend-production.up.railway.app"
+
 export default function Page() {
   const [lang, setLang] = useState<Lang>("vi")
   const [childrenMode, setChildrenMode] = useState(true)
@@ -52,7 +57,7 @@ export default function Page() {
     formData.append("lang", currentLang)
 
     try {
-      const response = await fetch("http://localhost:8000/api/analyze", {
+      const response = await fetch(`${API_BASE_URL}/api/analyze`, {
         method: "POST",
         body: formData,
       })
@@ -170,7 +175,7 @@ export default function Page() {
       </main>
       <footer className="border-t border-border py-8">
         <div className="mx-auto max-w-6xl px-4 text-center text-sm text-muted-foreground sm:px-6">
-          Trash2Treasure Vision · Powered by Gemini 3.6 Flash
+          Trash2Treasure Vision · Powered by Gemini 3.6 Flash & Railway
         </div>
       </footer>
     </div>
