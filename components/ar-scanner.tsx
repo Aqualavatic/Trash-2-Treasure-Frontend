@@ -2,31 +2,28 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { X, Loader2, Sparkles, AlertCircle, RefreshCw, CheckCircle2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export function ArScanner({
   onClose,
-  onAnalyzeFile,
-  lang = "vi",
-  childrenMode = true,
 }: {
   onClose: () => void
-  onAnalyzeFile: (file: File) => void
-  lang?: "vi" | "en"
-  childrenMode?: boolean
+  onAnalyzeFile?: (file: File) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isScanning, setIsScanning] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment")
-  
-  const [detectedResult, setDetectedResult] = useState<{
+
+  // Trạng thái lưu kết quả Live AR từ server trả về
+  const [liveData, setLiveData] = useState<{
     wasteType: string
     category: string
-    confidence?: number
+    confidence: number
+    box: [number, number, number, number] // [ymin, xmin, ymax, xmax] theo %
+    quickGuide: string
   } | null>(null)
 
   useEffect(() => {
@@ -79,8 +76,8 @@ export function ArScanner({
     }
   }, [facingMode])
 
-  // GỌI API RIÊNG CHO YOLO (SIÊU TỐC)
-  const captureAndAutoScan = useCallback(async () => {
+  // Vòng lặp quét ngầm liên tục Real-time (Live AR Loop)
+  const captureAndLiveScan = useCallback(async () => {
     if (!videoRef.current || isScanning || isLoading) return
     const video = videoRef.current
     if (video.videoWidth === 0 || video.videoHeight === 0) return
@@ -101,12 +98,11 @@ export function ArScanner({
             return
           }
 
-          const file = new File([blob], "ar_autoscan.jpg", { type: "image/jpeg" })
+          const file = new File([blob], "ar_live.jpg", { type: "image/jpeg" })
           const formData = new FormData()
           formData.append("file", file)
 
           try {
-            // Gọi vào endpoint siêu tốc chuyên YOLO
             const response = await fetch(`${API_URL}/api/ar-detect`, {
               method: "POST",
               body: formData,
@@ -115,61 +111,40 @@ export function ArScanner({
             if (response.ok) {
               const result = await response.json()
               if (result.has_waste) {
-                setDetectedResult({
-                  wasteType: result.waste_type || "Rác thải",
-                  category: result.category || "Tái chế",
+                setLiveData({
+                  wasteType: result.waste_type,
+                  category: result.category,
                   confidence: result.confidence,
+                  box: result.box,
+                  quickGuide: result.quick_guide,
                 })
               } else {
-                setDetectedResult(null)
+                setLiveData(null)
               }
             }
           } catch (err) {
-            console.error("Lỗi quét AR:", err)
+            console.error("Lỗi kết nối AI Live:", err)
           } finally {
             setIsScanning(false)
           }
-        }, "image/jpeg", 0.8)
+        }, "image/jpeg", 0.75)
       }
     } catch (e) {
       setIsScanning(false)
     }
   }, [isScanning, isLoading])
 
-  // Quét nhanh mỗi 1.5 giây vì YOLO phản hồi cực kỳ nhanh
+  // Tự động kích hoạt quét mỗi 1.2 giây để tạo độ mượt chuyển động AR trực tiếp
   useEffect(() => {
     if (isLoading || errorMessage) return
-
     const interval = setInterval(() => {
-      captureAndAutoScan()
-    }, 1500) 
-
+      captureAndLiveScan()
+    }, 1200)
     return () => clearInterval(interval)
-  }, [isLoading, errorMessage, captureAndAutoScan])
+  }, [isLoading, errorMessage, captureAndLiveScan])
 
   const toggleCamera = () => {
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"))
-  }
-
-  // Khi bấm chọn, lúc này mới gọi Gemini phân tích sâu để lấy ý tưởng DIY chi tiết
-  const handleLockAndSelect = () => {
-    if (!videoRef.current) return
-    const video = videoRef.current
-    const canvas = document.createElement("canvas")
-    canvas.width = video.videoWidth || 640
-    canvas.height = video.videoHeight || 480
-    const ctx = canvas.getContext("2d")
-    
-    if (ctx) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const file = new File([blob], "ar_locked.jpg", { type: "image/jpeg" })
-          onAnalyzeFile(file)
-          onClose()
-        }
-      }, "image/jpeg", 0.95)
-    }
   }
 
   return (
@@ -201,7 +176,7 @@ export function ArScanner({
           {isLoading && !errorMessage && (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-slate-900 text-white">
               <Loader2 className="size-8 animate-spin text-emerald-400" />
-              <p className="text-sm font-medium">Đang khởi động Camera AI...</p>
+              <p className="text-sm font-medium">Đang khởi động Camera Live AR...</p>
             </div>
           )}
 
@@ -212,26 +187,35 @@ export function ArScanner({
             </div>
           )}
 
-          {!isLoading && !errorMessage && (
-            <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center p-6">
-              <div className={`relative w-72 h-72 rounded-3xl border-2 transition-all duration-300 ${
-                detectedResult ? "border-emerald-400 bg-emerald-500/10 shadow-[0_0_30px_rgba(52,211,153,0.5)]" : "border-dashed border-white/40 bg-white/5"
-              }`}>
-                <div className={`absolute -top-1 -left-1 size-5 border-t-4 border-l-4 rounded-tl-lg ${detectedResult ? "border-emerald-400" : "border-white"}`} />
-                <div className={`absolute -top-1 -right-1 size-5 border-t-4 border-r-4 rounded-tr-lg ${detectedResult ? "border-emerald-400" : "border-white"}`} />
-                <div className={`absolute -bottom-1 -left-1 size-5 border-b-4 border-l-4 rounded-bl-lg ${detectedResult ? "border-emerald-400" : "border-white"}`} />
-                <div className={`absolute -bottom-1 -right-1 size-5 border-b-4 border-r-4 rounded-br-lg ${detectedResult ? "border-emerald-400" : "border-white"}`} />
+          {/* LỚP PHỦ AR LIVE BÁM SÁT VẬT THỂ & HIỂN THỊ HƯỚNG DẪN TRỰC TIẾP */}
+          {!isLoading && !errorMessage && liveData && liveData.box ? (
+            <div 
+              className="absolute z-20 pointer-events-none border-2 border-emerald-400 bg-emerald-500/15 rounded-xl transition-all duration-300 shadow-[0_0_25px_rgba(52,211,153,0.5)]"
+              style={{
+                top: `${liveData.box[0]}%`,
+                left: `${liveData.box[1]}%`,
+                height: `${liveData.box[2] - liveData.box[0]}%`,
+                width: `${liveData.box[3] - liveData.box[1]}%`,
+              }}
+            >
+              {/* Nhãn tên rác bay lơ lửng phía trên vật thể */}
+              <div className="absolute -top-11 left-0 flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-1.5 text-slate-950 font-bold text-xs shadow-xl whitespace-nowrap">
+                <CheckCircle2 className="size-4" />
+                <span>{liveData.wasteType} ({Math.round(liveData.confidence * 100)}%)</span>
+              </div>
 
-                {detectedResult ? (
-                  <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-2xl bg-emerald-500 px-4 py-2 text-slate-950 font-bold shadow-xl animate-bounce">
-                    <CheckCircle2 className="size-5" />
-                    <span>#{detectedResult.wasteType}</span>
-                  </div>
-                ) : (
-                  <div className="absolute -top-10 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white backdrop-blur-md">
-                    {isScanning ? "Đang quét..." : "Lia camera vào rác"}
-                  </div>
-                )}
+              {/* Bảng hướng dẫn trực tiếp hiển thị ngay bên trong không gian AR */}
+              <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 rounded-2xl bg-slate-900/90 border border-emerald-500/40 px-3 py-2 text-center text-white text-xs shadow-2xl backdrop-blur-md w-48 whitespace-nowrap">
+                <p className="font-bold text-emerald-400">💡 Hướng dẫn nhanh:</p>
+                <p className="text-[11px] text-slate-200 mt-0.5">{liveData.quickGuide}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center p-6">
+              <div className="relative w-64 h-64 rounded-3xl border-2 border-dashed border-white/30 bg-white/5 flex items-center justify-center">
+                <span className="rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white backdrop-blur-md">
+                  {isScanning ? "AI đang quét không gian..." : "Lia camera vào rác để nhận hướng dẫn AR"}
+                </span>
               </div>
             </div>
           )}
@@ -240,21 +224,15 @@ export function ArScanner({
         <div className="z-30 flex items-center justify-between gap-4 bg-slate-900 p-5 border-t border-slate-800">
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <Sparkles className="size-4 shrink-0 text-emerald-400" />
-            <span>{detectedResult ? "Đã nhận diện! Bấm để lấy ý tưởng" : "Hệ thống YOLO đang tự động quét..."}</span>
+            <span>{liveData ? "Đang hướng dẫn trực tiếp trên AR Live!" : "Đưa rác vào khung hình camera"}</span>
           </div>
 
-          <Button
-            onClick={handleLockAndSelect}
-            disabled={isLoading || !!errorMessage}
-            className={`gap-2 rounded-2xl font-bold px-6 py-5 shadow-lg transition-all ${
-              detectedResult 
-                ? "bg-emerald-500 hover:bg-emerald-600 text-slate-950 shadow-emerald-500/30 scale-105" 
-                : "bg-slate-800 text-slate-200 hover:bg-slate-700"
-            }`}
+          <button
+            onClick={onClose}
+            className="rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-6 py-3 text-sm transition-all"
           >
-            <Sparkles className="size-4" />
-            {detectedResult ? "Chọn vật thể này" : "Chụp & Phân tích"}
-          </Button>
+            Đóng AR
+          </button>
         </div>
       </div>
     </div>
