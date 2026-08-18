@@ -2,13 +2,20 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { X, Loader2, Sparkles, AlertCircle, RefreshCw, CheckCircle2, ZoomIn } from "lucide-react"
+import type { Dict } from "@/lib/dictionary"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export function ArScanner({
   onClose,
+  onAnalyzeFile,
+  t,
+  lang,
 }: {
   onClose: () => void
+  onAnalyzeFile?: (file: File) => void
+  t: Dict
+  lang: "vi" | "en"
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -38,7 +45,7 @@ export function ArScanner({
 
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error("Trình duyệt không hỗ trợ truy cập Camera!")
+          throw new Error(t.arCameraError)
         }
 
         stream = await navigator.mediaDevices.getUserMedia({
@@ -69,7 +76,7 @@ export function ArScanner({
       } catch (err: any) {
         console.error("Lỗi Camera:", err)
         if (!isMounted) return
-        setErrorMessage("Không thể kết nối với Camera. Vui lòng cấp quyền!")
+        setErrorMessage(t.arCameraError)
         setIsLoading(false)
       }
     }
@@ -123,6 +130,7 @@ export function ArScanner({
           const file = new File([blob], "ar_live.jpg", { type: "image/jpeg" })
           const formData = new FormData()
           formData.append("file", file)
+          formData.append("lang", lang)
 
           try {
             const response = await fetch(`${API_URL}/api/ar-detect`, {
@@ -181,7 +189,7 @@ export function ArScanner({
         <button
           onClick={toggleCamera}
           className="absolute top-4 left-4 z-30 rounded-full bg-black/60 p-2.5 text-white hover:bg-black/80 transition-colors"
-          title="Đổi camera"
+          title={t.arSwitchCamera}
         >
           <RefreshCw className="size-5" />
         </button>
@@ -189,7 +197,7 @@ export function ArScanner({
         {/* Thanh chọn mức Zoom nhanh */}
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-white text-xs font-medium">
           <ZoomIn className="size-3.5 text-emerald-400" />
-          <span>Zoom:</span>
+          <span>{t.arZoom}</span>
           <button onClick={() => handleZoomChange(1)} className={`px-2 py-0.5 rounded-full transition-colors ${zoomLevel === 1 ? 'bg-emerald-500 text-slate-950 font-bold' : 'hover:bg-white/20'}`}>1x</button>
           <button onClick={() => handleZoomChange(2)} className={`px-2 py-0.5 rounded-full transition-colors ${zoomLevel === 2 ? 'bg-emerald-500 text-slate-950 font-bold' : 'hover:bg-white/20'}`}>2x</button>
           <button onClick={() => handleZoomChange(3)} className={`px-2 py-0.5 rounded-full transition-colors ${zoomLevel === 3 ? 'bg-emerald-500 text-slate-950 font-bold' : 'hover:bg-white/20'}`}>3x</button>
@@ -209,7 +217,7 @@ export function ArScanner({
           {isLoading && !errorMessage && (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-slate-900 text-white">
               <Loader2 className="size-8 animate-spin text-emerald-400" />
-              <p className="text-sm font-medium">Đang khởi động Live AR...</p>
+              <p className="text-sm font-medium">{t.arLoading}</p>
             </div>
           )}
 
@@ -237,7 +245,7 @@ export function ArScanner({
               </div>
 
               <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 rounded-2xl bg-slate-900/90 border border-emerald-500/40 px-3 py-2 text-center text-white text-xs shadow-2xl backdrop-blur-md w-48 whitespace-nowrap">
-                <p className="font-bold text-emerald-400">💡 Hướng dẫn nhanh:</p>
+                <p className="font-bold text-emerald-400">{t.arQuickGuide}</p>
                 <p className="text-[11px] text-slate-200 mt-0.5">{liveData.quickGuide}</p>
               </div>
             </div>
@@ -245,7 +253,7 @@ export function ArScanner({
             <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center p-6">
               <div className="relative w-64 h-64 rounded-3xl border-2 border-dashed border-white/30 bg-white/5 flex items-center justify-center">
                 <span className="rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white backdrop-blur-md">
-                  {isScanning ? "AI đang quét không gian..." : "Lia camera vào rác để nhận hướng dẫn"}
+                  {isScanning ? t.arScanning : t.arAimCamera}
                 </span>
               </div>
             </div>
@@ -255,14 +263,14 @@ export function ArScanner({
         <div className="z-30 flex items-center justify-between gap-4 bg-slate-900 p-5 border-t border-slate-800">
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <Sparkles className="size-4 shrink-0 text-emerald-400" />
-            <span>{liveData ? "Đang hướng dẫn AR trực tiếp!" : "Đưa rác vào khung hình"}</span>
+            <span>{liveData ? t.arLiveGuidance : t.arFrameHint}</span>
           </div>
 
           <button
             onClick={onClose}
             className="rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-6 py-3 text-sm transition-all"
           >
-            Đóng AR
+            {t.arClose}
           </button>
         </div>
       </div>
