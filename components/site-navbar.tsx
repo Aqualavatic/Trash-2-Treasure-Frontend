@@ -19,7 +19,7 @@ export function SiteNavbar({
             <Recycle className="size-5" aria-hidden="true" />
           </span>
           <span className="font-serif text-lg font-bold tracking-tight text-foreground">
-            Trash2Treasure
+            UpcycleDIY
             <span className="text-primary"> Vision</span>
           </span>
         </div>

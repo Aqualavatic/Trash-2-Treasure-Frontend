@@ -4,7 +4,7 @@ import { useState, useRef } from "react"
 import dynamic from "next/dynamic"
 import { Camera, ImageUp, Leaf, Sparkles, Loader2, RefreshCw, Scan } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import type { Dict } from "@/lib/dictionary"
+import type { Dict, Lang } from "@/lib/dictionary"
 
 // Nạp động ArScanner và tắt SSR để đảm bảo không bị lỗi Render phía Server
 const ArScanner = dynamic(
@@ -14,12 +14,14 @@ const ArScanner = dynamic(
 
 export function HeroUpload({
   t,
+  lang,
   childrenMode,
   onChildrenModeChange,
   onAnalyze,
   isLoading,
 }: {
   t: Dict
+  lang: Lang
   childrenMode: boolean
   onChildrenModeChange: (value: boolean) => void
   onAnalyze: (file: File) => void
@@ -57,6 +59,8 @@ export function HeroUpload({
       {/* Modal Quét AR Live */}
       {showArModal && (
         <ArScanner
+          t={t}
+          lang={lang}
           onClose={() => setShowArModal(false)}
           onAnalyzeFile={(file) => {
             handleFileChange(file)
@@ -163,7 +167,7 @@ export function HeroUpload({
                     className="h-12 gap-2 bg-primary/10 px-6 text-base font-semibold text-primary hover:bg-primary/20"
                   >
                     <Scan className="size-5 shrink-0" />
-                    <span>Quét AR Live</span>
+                    <span>{t.arScanButton}</span>
                   </Button>
                 </div>
               </>

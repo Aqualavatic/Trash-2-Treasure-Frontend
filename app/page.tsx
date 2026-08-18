@@ -141,6 +141,7 @@ export default function Page() {
       <SiteNavbar lang={lang} onLangChange={setLang} />
       <main>
         <HeroUpload
+          lang={lang}
           childrenMode={childrenMode}
           isLoading={isLoading}
           onAnalyze={handleAnalyze}
@@ -173,7 +174,7 @@ export default function Page() {
       </main>
       <footer className="border-t border-border py-8">
         <div className="mx-auto max-w-6xl px-4 text-center text-sm text-muted-foreground sm:px-6">
-          Trash2Treasure Vision · Powered by Gemini 3.6 Flash
+          UpcycleDIY Vision · Powered by Gemini 3.6 Flash
         </div>
       </footer>
     </div>
