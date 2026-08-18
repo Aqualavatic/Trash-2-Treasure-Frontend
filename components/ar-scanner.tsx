@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { X, Loader2, Sparkles, AlertCircle, RefreshCw, CheckCircle2, ZoomIn } from "lucide-react"
-import { Button } from "@/components/ui/button"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
@@ -17,9 +16,8 @@ export function ArScanner({
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment")
   
-  // Trạng thái quản lý mức zoom (Mặc định 1x để không bị tình trạng zoom 3x)
+  // Quản lý mức zoom chống lỗi bị phóng to 3x mặc định
   const [zoomLevel, setZoomLevel] = useState<number>(1)
-  const [maxZoom, setMaxZoom] = useState<number>(3)
   const [trackCapabilities, setTrackCapabilities] = useState<MediaTrackCapabilities | null>(null)
 
   const [liveData, setLiveData] = useState<{
@@ -43,14 +41,12 @@ export function ArScanner({
           throw new Error("Trình duyệt không hỗ trợ truy cập Camera!")
         }
 
-        // Yêu cầu camera chính (environment) và cố gắng ép về góc rộng mặc định 1x
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: facingMode,
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            // Một số trình duyệt hỗ trợ ràng buộc advanced để tránh bị nhạy cảm với ống kính zoom
-            advanced: [{ zoom: 1 } as any] 
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            advanced: [{ zoom: 1 } as any]
           },
           audio: false,
         })
@@ -63,15 +59,10 @@ export function ArScanner({
             if (playErr.name !== "AbortError") throw playErr
           }
 
-          // Lấy track video để kiểm tra khả năng hỗ trợ zoom phần cứng của thiết bị
           const videoTrack = stream.getVideoTracks()[0]
-          const capabilities = videoTrack.getCapabilities() as MediaTrackCapabilities & { zoom?: { min: number; max: number; step: number } }
-          
-          setTrackCapabilities(capabilities as any)
-          if (capabilities && (capabilities as any).zoom) {
-            setMaxZoom((capabilities as any).zoom.max || 3)
-          }
-          setZoomLevel(1) // Đảm bảo khởi tạo luôn ở mức 1x
+          const capabilities = videoTrack.getCapabilities()
+          setTrackCapabilities(capabilities)
+          setZoomLevel(1)
         }
 
         if (isMounted) setIsLoading(false)
@@ -93,7 +84,6 @@ export function ArScanner({
     }
   }, [facingMode])
 
-  // Hàm thay đổi mức zoom của camera thực tế trên điện thoại
   const handleZoomChange = async (newZoom: number) => {
     setZoomLevel(newZoom)
     if (videoRef.current && videoRef.current.srcObject) {
@@ -104,7 +94,7 @@ export function ArScanner({
           advanced: [{ zoom: newZoom } as any]
         })
       } catch (e) {
-        console.warn("Trình duyệt không hỗ trợ chỉnh cứng phần cứng zoom qua API, dùng scale CSS dự phòng:", e)
+        console.warn("Dùng scale CSS dự phòng cho zoom", e)
       }
     }
   }
@@ -155,7 +145,7 @@ export function ArScanner({
               }
             }
           } catch (err) {
-            console.error("Lỗi AI Live:", err)
+            console.error("Lỗi kết nối AI Live:", err)
           } finally {
             setIsScanning(false)
           }
@@ -196,7 +186,7 @@ export function ArScanner({
           <RefreshCw className="size-5" />
         </button>
 
-        {/* Thanh tùy chỉnh Zoom nhanh ngay trên màn hình AR */}
+        {/* Thanh chọn mức Zoom nhanh */}
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-white text-xs font-medium">
           <ZoomIn className="size-3.5 text-emerald-400" />
           <span>Zoom:</span>
@@ -212,7 +202,6 @@ export function ArScanner({
             muted
             className="h-full w-full object-cover transition-transform duration-200"
             style={{
-              // Fallback scale CSS nếu phần cứng không nhận lệnh constraint zoom trực tiếp
               transform: trackCapabilities && !(trackCapabilities as any).zoom ? `scale(${zoomLevel})` : 'scale(1)'
             }}
           />
@@ -220,7 +209,7 @@ export function ArScanner({
           {isLoading && !errorMessage && (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-slate-900 text-white">
               <Loader2 className="size-8 animate-spin text-emerald-400" />
-              <p className="text-sm font-medium">Đang khởi động Camera 1x mặc định...</p>
+              <p className="text-sm font-medium">Đang khởi động Live AR...</p>
             </div>
           )}
 
@@ -256,7 +245,7 @@ export function ArScanner({
             <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center p-6">
               <div className="relative w-64 h-64 rounded-3xl border-2 border-dashed border-white/30 bg-white/5 flex items-center justify-center">
                 <span className="rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white backdrop-blur-md">
-                  {isScanning ? "AI đang quét không gian..." : "Lia camera (1x) vào rác"}
+                  {isScanning ? "AI đang quét không gian..." : "Lia camera vào rác để nhận hướng dẫn"}
                 </span>
               </div>
             </div>
