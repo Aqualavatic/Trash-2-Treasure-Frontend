@@ -167,7 +167,7 @@ export function HeroUpload({
                     className="h-12 gap-2 bg-primary/10 px-6 text-base font-semibold text-primary hover:bg-primary/20"
                   >
                     <Scan className="size-5 shrink-0" />
-                    <span>{t.arScanButton}</span>
+                    <span>{t.arScanButton} <span className="text-xs font-bold tracking-wide">[BETA]</span></span>
                   </Button>
                 </div>
               </>
