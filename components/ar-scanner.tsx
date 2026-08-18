@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
-import { X, Loader2, Sparkles, AlertCircle, RefreshCw, CheckCircle2, ZoomIn } from "lucide-react"
+import { X, Loader2, Sparkles, AlertCircle, RefreshCw, CheckCircle2, ZoomIn, Wrench, ListOrdered } from "lucide-react"
 import type { Dict } from "@/lib/dictionary"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -23,7 +23,6 @@ export function ArScanner({
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment")
   
-  // Quản lý mức zoom chống lỗi bị phóng to 3x mặc định
   const [zoomLevel, setZoomLevel] = useState<number>(1)
   const [trackCapabilities, setTrackCapabilities] = useState<MediaTrackCapabilities | null>(null)
 
@@ -33,6 +32,8 @@ export function ArScanner({
     confidence: number
     box: [number, number, number, number]
     quickGuide: string
+    materials?: string[]
+    steps?: string[]
   } | null>(null)
 
   useEffect(() => {
@@ -147,6 +148,8 @@ export function ArScanner({
                   confidence: result.confidence,
                   box: result.box,
                   quickGuide: result.quick_guide,
+                  materials: result.materials,
+                  steps: result.steps,
                 })
               } else {
                 setLiveData(null)
@@ -162,7 +165,7 @@ export function ArScanner({
     } catch (e) {
       setIsScanning(false)
     }
-  }, [isScanning, isLoading])
+  }, [isScanning, isLoading, lang])
 
   useEffect(() => {
     if (isLoading || errorMessage) return
@@ -177,8 +180,8 @@ export function ArScanner({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 backdrop-blur-md">
-      <div className="relative flex h-full max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-950 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-2 sm:p-4 backdrop-blur-md">
+      <div className="relative flex h-full max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-950 shadow-2xl">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 z-30 rounded-full bg-black/60 p-2.5 text-white hover:bg-black/80 transition-colors"
@@ -228,25 +231,44 @@ export function ArScanner({
             </div>
           )}
 
-          {/* LỚP PHỦ AR LIVE */}
+          {/* LỚP PHỦ AR LIVE ĐÃ ĐƯỢC TỐI ƯU HÓA KHÔNG BỊ QUÁ KHỔ */}
           {!isLoading && !errorMessage && liveData && liveData.box ? (
             <div 
-              className="absolute z-20 pointer-events-none border-2 border-emerald-400 bg-emerald-500/15 rounded-xl transition-all duration-300 shadow-[0_0_25px_rgba(52,211,153,0.5)]"
+              className="absolute z-20 pointer-events-none border-2 border-emerald-400 bg-emerald-500/10 rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(52,211,153,0.4)]"
               style={{
-                top: `${liveData.box[0]}%`,
-                left: `${liveData.box[1]}%`,
-                height: `${liveData.box[2] - liveData.box[0]}%`,
-                width: `${liveData.box[3] - liveData.box[1]}%`,
+                top: `${Math.max(5, liveData.box[0])}%`,
+                left: `${Math.max(5, liveData.box[1])}%`,
+                height: `${Math.min(70, liveData.box[2] - liveData.box[0])}%`,
+                width: `${Math.min(85, liveData.box[3] - liveData.box[1])}%`,
               }}
             >
-              <div className="absolute -top-11 left-0 flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-1.5 text-slate-950 font-bold text-xs shadow-xl whitespace-nowrap">
+              {/* Tiêu đề Box */}
+              <div className="absolute -top-10 left-0 flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-1 text-slate-950 font-bold text-xs shadow-xl whitespace-nowrap">
                 <CheckCircle2 className="size-4" />
                 <span>{liveData.wasteType} ({Math.round(liveData.confidence * 100)}%)</span>
               </div>
 
-              <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 rounded-2xl bg-slate-900/90 border border-emerald-500/40 px-3 py-2 text-center text-white text-xs shadow-2xl backdrop-blur-md w-48 whitespace-nowrap">
-                <p className="font-bold text-emerald-400">{t.arQuickGuide}</p>
-                <p className="text-[11px] text-slate-200 mt-0.5">{liveData.quickGuide}</p>
+              {/* BẢNG HƯỚNG DẪN CHI TIẾT VẬT LIỆU VÀ CÁC BƯỚC */}
+              <div className="absolute -bottom-28 sm:-bottom-32 left-1/2 -translate-x-1/2 rounded-2xl bg-slate-900/95 border border-emerald-500/50 p-3 text-white text-xs shadow-2xl backdrop-blur-md w-[90vw] max-w-xs pointer-events-auto">
+                <p className="font-bold text-emerald-400 mb-1 flex items-center gap-1">
+                  <Sparkles className="size-3.5" /> {liveData.quickGuide}
+                </p>
+
+                {/* Phần hiển thị nguyên liệu (Materials) */}
+                {liveData.materials && liveData.materials.length > 0 && (
+                  <div className="mt-1.5 pt-1.5 border-t border-slate-800">
+                    <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1">
+                      <Wrench className="size-3 text-emerald-400" /> Nguyên liệu cần:
+                    </p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {liveData.materials.map((mat, idx) => (
+                        <span key={idx} className="bg-slate-800 text-emerald-300 px-2 py-0.5 rounded-md text-[10px]">
+                          {mat}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -260,7 +282,7 @@ export function ArScanner({
           )}
         </div>
 
-        <div className="z-30 flex items-center justify-between gap-4 bg-slate-900 p-5 border-t border-slate-800">
+        <div className="z-30 flex items-center justify-between gap-4 bg-slate-900 p-4 sm:p-5 border-t border-slate-800">
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <Sparkles className="size-4 shrink-0 text-emerald-400" />
             <span>{liveData ? t.arLiveGuidance : t.arFrameHint}</span>
@@ -268,7 +290,7 @@ export function ArScanner({
 
           <button
             onClick={onClose}
-            className="rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-6 py-3 text-sm transition-all"
+            className="rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-5 py-2.5 text-sm transition-all"
           >
             {t.arClose}
           </button>
