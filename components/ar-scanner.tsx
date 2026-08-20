@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
-import { X, Loader2, Sparkles, AlertCircle, RefreshCw, CheckCircle2, ZoomIn, Zap } from "lucide-react"
+import { X, Loader2, Sparkles, AlertCircle, RefreshCw, ZoomIn, Zap, CheckCircle2 } from "lucide-react"
 import type { Dict } from "@/lib/dictionary"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -24,9 +24,11 @@ export function ArScanner({
   const [zoomLevel, setZoomLevel] = useState<number>(1)
   const [trackCapabilities, setTrackCapabilities] = useState<MediaTrackCapabilities | null>(null)
 
+  // Cập nhật state lưu thêm danh sách các vật thể để vẽ Bounding Box
   const [liveData, setLiveData] = useState<{
     wasteType: string
     confidence: number
+    objects: { waste_type: string; confidence: number; box: number[] }[]
     diyIdeas: { id: string, title: string, description: string }[]
   } | null>(null)
 
@@ -139,6 +141,7 @@ export function ArScanner({
                 setLiveData({
                   wasteType: result.waste_type,
                   confidence: result.confidence,
+                  objects: result.objects || [],
                   diyIdeas: result.diy_ideas || []
                 })
               } else {
@@ -161,7 +164,7 @@ export function ArScanner({
     if (isLoading || errorMessage) return
     const interval = setInterval(() => {
       captureAndLiveScan()
-    }, 2000)
+    }, 3000) // Tăng lên 3s để tối ưu hiệu suất gọi API kết hợp vật thể
     return () => clearInterval(interval)
   }, [isLoading, errorMessage, captureAndLiveScan])
 
@@ -187,25 +190,43 @@ export function ArScanner({
         <div className="relative flex-1 overflow-hidden bg-black w-full h-full flex items-center justify-center">
           <video ref={videoRef} playsInline muted className="h-full w-full object-cover" />
           
+          {/* VẼ BOUNDING BOX KHÔNG HIỆN TÊN (CHỈ HIỆN KHUNG KHOANH VẬT THỂ) */}
+          {liveData?.objects && liveData.objects.map((obj, idx) => {
+            // box format từ backend trả về dạng [ymin, xmin, ymax, xmax] theo phần trăm (%)
+            const [ymin, xmin, ymax, xmax] = obj.box;
+            return (
+              <div
+                key={idx}
+                className="absolute border-2 border-emerald-400 bg-emerald-400/10 rounded-md pointer-events-none transition-all duration-300 z-10 shadow-[0_0_15px_rgba(52,211,153,0.4)]"
+                style={{
+                  top: `${ymin}%`,
+                  left: `${xmin}%`,
+                  height: `${ymax - ymin}%`,
+                  width: `${xmax - xmin}%`,
+                }}
+              />
+            )
+          })}
+
           {isLoading && (!errorMessage) && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/80 text-white"><Loader2 className="size-6 animate-spin text-emerald-400" /><p className="text-xs">{t.arLoading}</p></div>}
           {errorMessage && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-slate-950/80 text-red-400 gap-2 text-xs"><AlertCircle className="size-8 text-red-500" /><span className="font-semibold text-slate-200">{errorMessage}</span></div>}
 
-          {/* KHUNG THÔNG TIN ĐÃ ĐƯỢC THU NHỎ (COMPACT & SCALED DOWN) */}
+          {/* KHUNG THÔNG TIN TỔNG HỢP Ở GÓC MÀN HÌNH */}
           {(!isLoading && !errorMessage && liveData) ? (
-            <div className="absolute bottom-3 left-3 z-20 rounded-xl bg-slate-950/80 border border-white/10 p-2.5 text-white text-[10px] shadow-xl backdrop-blur-md w-[85vw] max-w-[260px] animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="absolute bottom-3 left-3 z-20 rounded-xl bg-slate-950/85 border border-white/15 p-2.5 text-white text-[10px] shadow-xl backdrop-blur-md w-[85vw] max-w-[260px] animate-in fade-in slide-in-from-bottom-2 duration-300">
               <div className="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-white/10">
                 <div className="p-1 rounded bg-emerald-500/20 text-emerald-300">
                   <CheckCircle2 className="size-3.5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-xs text-white capitalize">{liveData.wasteType}</h3>
-                  <p className="text-[9px] text-slate-400">Độ tin cậy: {Math.round(liveData.confidence * 100)}%</p>
+                  <h3 className="font-bold text-xs text-white capitalize line-clamp-1">{liveData.wasteType}</h3>
+                  <p className="text-[9px] text-slate-400">Đã nhận diện các vật thể kết hợp</p>
                 </div>
               </div>
 
               <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
                 <p className="font-semibold text-slate-300 flex items-center gap-1 text-[10px]">
-                  <Zap className="size-3 text-amber-400" /> Ý tưởng tái chế:
+                  <Zap className="size-3 text-amber-400" /> Ý tưởng UpcycleDIY:
                 </p>
                 
                 {liveData.diyIdeas.map((idea, index) => (
@@ -235,7 +256,7 @@ export function ArScanner({
         <div className="z-30 flex items-center justify-between gap-2 bg-slate-950 px-3 py-2 border-t border-white/10">
           <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
             <Sparkles className="size-3.5 shrink-0 text-emerald-400" />
-            <span>{liveData ? "Đã nhận diện thành công vật thể." : t.arFrameHint}</span>
+            <span>{liveData ? "Đã khoanh vùng vật thể trong khung hình." : t.arFrameHint}</span>
           </div>
           <button onClick={onClose} className="rounded-lg bg-white/5 hover:bg-white/10 text-slate-200 font-medium px-3 py-1 text-[11px] transition-all border border-white/10">
             {t.arClose}
