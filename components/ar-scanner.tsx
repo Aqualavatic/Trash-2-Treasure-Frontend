@@ -128,7 +128,7 @@ export function ArScanner({
           formData.append("lang", lang)
 
           try {
-            const response = await fetch(`${API_URL}/api/ar-detect-diy`, {
+            const response = await fetch(`${API_URL}/api/ar-detect`, {
               method: "POST",
               body: formData,
             })
