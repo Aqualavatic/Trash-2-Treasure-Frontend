@@ -24,11 +24,9 @@ export function ArScanner({
   const [zoomLevel, setZoomLevel] = useState<number>(1)
   const [trackCapabilities, setTrackCapabilities] = useState<MediaTrackCapabilities | null>(null)
 
-  // Cập nhật interface để lưu danh sách ý tưởng DIY
   const [liveData, setLiveData] = useState<{
     wasteType: string
     confidence: number
-    // Thay đổi quickGuide thành mảng ý tưởng DIY
     diyIdeas: { id: string, title: string, description: string }[]
   } | null>(null)
 
@@ -130,7 +128,6 @@ export function ArScanner({
           formData.append("lang", lang)
 
           try {
-            // Giả lập gọi API nhận diện rác và trả về ý tưởng DIY
             const response = await fetch(`${API_URL}/api/ar-detect-diy`, {
               method: "POST",
               body: formData,
@@ -142,9 +139,8 @@ export function ArScanner({
                 setLiveData({
                   wasteType: result.waste_type,
                   confidence: result.confidence,
-                  // Cấu trúc mới: API trả về array các ý tưởng
                   diyIdeas: result.diy_ideas || [
-                    { id: '1', title: 'Làm chậu cây mini', description: 'Cắt phần đầu chai...' }, // Dữ liệu mẫu
+                    { id: '1', title: 'Làm chậu cây mini', description: 'Cắt phần đầu chai...' },
                     { id: '2', title: 'Hộp đựng bút', description: 'Sơn màu trang trí...' },
                     { id: '3', title: 'Vòng đeo tay DIY', description: 'Cắt vòng từ thân chai...' }
                   ]
@@ -169,7 +165,7 @@ export function ArScanner({
     if (isLoading || errorMessage) return
     const interval = setInterval(() => {
       captureAndLiveScan()
-    }, 1500) // Tăng thời gian quét tí xíu để đỡ lag
+    }, 1500)
     return () => clearInterval(interval)
   }, [isLoading, errorMessage, captureAndLiveScan])
 
@@ -198,10 +194,9 @@ export function ArScanner({
           {isLoading && (!errorMessage) && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/80 text-white"><Loader2 className="size-6 animate-spin text-emerald-400" /><p className="text-xs">{t.arLoading}</p></div>}
           {errorMessage && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-slate-950/80 text-red-400 gap-2 text-xs"><AlertCircle className="size-8 text-red-500" /><span className="font-semibold text-slate-200">{errorMessage}</span></div>}
 
-          {/* GIAO DIỆN MỚI: GỌN VÀ TRONG SUỐT HƠN Ở GÓC DƯỚI TRÁI */}
+          {/* KHUNG GỌN VÀ TRONG SUỐT Ở GÓC DƯỚI TRÁI */}
           {(!isLoading && !errorMessage && liveData) ? (
             <div className="absolute bottom-4 left-4 z-20 rounded-2xl bg-slate-950/70 border border-white/10 p-3 text-white text-[11px] shadow-2xl backdrop-blur-xl w-[90vw] max-w-sm animate-in fade-in slide-in-from-bottom-3 duration-300">
-              {/* Header: Tên vật phẩm */}
               <div className="flex items-center gap-2 mb-2.5 pb-2.5 border-b border-white/10">
                 <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   <CheckCircle2 className="size-4" />
@@ -212,7 +207,6 @@ export function ArScanner({
                 </div>
               </div>
 
-              {/* Phần 3 Lựa chọn DIY (Đây là chỗ bạn cần xử lý data) */}
               <div className="space-y-2">
                 <p className="font-semibold text-slate-300 flex items-center gap-1.5 text-xs mb-2">
                   <Zap className="size-3.5 text-amber-400" /> Bạn muốn tái chế thành gì?
@@ -235,22 +229,12 @@ export function ArScanner({
                   </button>
                 ))}
               </div>
-
-               {/* NGUYÊN LIỆU CẦN (Bỏ comment nếu muốn hiện lại) */}
-               {/* 
-               <div className="mt-3 pt-3 border-t border-white/10">
-                 <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1"><Wrench className="size-3 text-emerald-400"/> Nguyên liệu chính:</p>
-                 <div className="flex flex-wrap gap-1 mt-1.5">
-                   {['Chai nhựa', 'Kéo', 'Băng keo'].map(mat => <span key={mat} className="bg-slate-700/50 text-emerald-200 px-2 py-0.5 rounded-md text-[10px]">{mat}</span>)}
-                 </div>
-               </div> 
-               */}
             </div>
           ) : (
-            // Placeholder khi đang quét
+            // Đã xóa backdrop-blur ở đây để màn hình camera ở giữa hoàn toàn trong suốt không bị mờ
             <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center p-6">
-              <div className="relative w-48 h-48 rounded-3xl border-2 border-dashed border-white/20 bg-white/5 backdrop-blur-sm flex items-center justify-center">
-                <span className="rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium text-white backdrop-blur-md">
+              <div className="relative w-48 h-48 rounded-3xl border-2 border-dashed border-white/20 bg-transparent flex items-center justify-center">
+                <span className="rounded-full bg-black/60 px-3 py-1 text-[11px] font-medium text-white backdrop-blur-md">
                   {isScanning ? t.arScanning : t.arAimCamera}
                 </span>
               </div>
