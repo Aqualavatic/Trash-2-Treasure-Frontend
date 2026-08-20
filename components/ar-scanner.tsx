@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
-import { X, Loader2, Sparkles, AlertCircle, RefreshCw, CheckCircle2, ZoomIn, Wrench, ListOrdered } from "lucide-react"
+import { X, Loader2, Sparkles, AlertCircle, RefreshCw, CheckCircle2, ZoomIn, Wrench } from "lucide-react"
 import type { Dict } from "@/lib/dictionary"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -30,7 +30,6 @@ export function ArScanner({
     wasteType: string
     category: string
     confidence: number
-    box: [number, number, number, number]
     quickGuide: string
     materials?: string[]
     steps?: string[]
@@ -146,7 +145,6 @@ export function ArScanner({
                   wasteType: result.waste_type,
                   category: result.category,
                   confidence: result.confidence,
-                  box: result.box,
                   quickGuide: result.quick_guide,
                   materials: result.materials,
                   steps: result.steps,
@@ -231,45 +229,36 @@ export function ArScanner({
             </div>
           )}
 
-          {/* LỚP PHỦ AR LIVE ĐÃ ĐƯỢC TỐI ƯU HÓA KHÔNG BỊ QUÁ KHỔ */}
-          {!isLoading && !errorMessage && liveData && liveData.box ? (
-            <div 
-              className="absolute z-20 pointer-events-none border-2 border-emerald-400 bg-emerald-500/10 rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(52,211,153,0.4)]"
-              style={{
-                top: `${Math.max(5, liveData.box[0])}%`,
-                left: `${Math.max(5, liveData.box[1])}%`,
-                height: `${Math.min(70, liveData.box[2] - liveData.box[0])}%`,
-                width: `${Math.min(85, liveData.box[3] - liveData.box[1])}%`,
-              }}
-            >
-              {/* Tiêu đề Box */}
-              <div className="absolute -top-10 left-0 flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-1 text-slate-950 font-bold text-xs shadow-xl whitespace-nowrap">
-                <CheckCircle2 className="size-4" />
+          {/* HIỂN THỊ THÔNG TIN Ở GÓC DƯỚI BÊN TRÁI (ĐÃ BỎ BOUNDING BOX) */}
+          {!isLoading && !errorMessage && liveData ? (
+            <div className="absolute bottom-4 left-4 z-20 rounded-2xl bg-slate-900/90 border border-emerald-500/50 p-3 text-white text-xs shadow-2xl backdrop-blur-md w-[85vw] max-w-xs animate-in fade-in slide-in-from-bottom-3 duration-200">
+              {/* Tên vật phẩm & Độ chính xác */}
+              <div className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-2.5 py-1 text-slate-950 font-bold text-xs shadow-md mb-2 w-fit">
+                <CheckCircle2 className="size-3.5" />
                 <span>{liveData.wasteType} ({Math.round(liveData.confidence * 100)}%)</span>
               </div>
 
-              {/* BẢNG HƯỚNG DẪN CHI TIẾT VẬT LIỆU VÀ CÁC BƯỚC */}
-              <div className="absolute -bottom-28 sm:-bottom-32 left-1/2 -translate-x-1/2 rounded-2xl bg-slate-900/95 border border-emerald-500/50 p-3 text-white text-xs shadow-2xl backdrop-blur-md w-[90vw] max-w-xs pointer-events-auto">
-                <p className="font-bold text-emerald-400 mb-1 flex items-center gap-1">
-                  <Sparkles className="size-3.5" /> {liveData.quickGuide}
-                </p>
+              {/* Hướng dẫn nhanh */}
+              <p className="font-medium text-slate-200 mb-1 flex items-start gap-1">
+                <Sparkles className="size-3.5 text-emerald-400 shrink-0 mt-0.5" /> 
+                <span>{liveData.quickGuide}</span>
+              </p>
 
-                {/* Phần hiển thị nguyên liệu (Materials) */}
-                {liveData.materials && liveData.materials.length > 0 && (
-                  <div className="mt-1.5 pt-1.5 border-t border-slate-800">
-                    <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1">
-                      <Wrench className="size-3 text-emerald-400" /> Nguyên liệu cần:
-                    </p>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {liveData.materials.map((mat, idx) => (
-                        <span key={idx} className="bg-slate-800 text-emerald-300 px-2 py-0.5 rounded-md text-[10px]">
-                          {mat}
-                        </span>
-                      ))}
-                    </div>
+              {/* Phần hiển thị nguyên liệu (Materials) */}
+              {liveData.materials && liveData.materials.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-slate-800">
+                  <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1">
+                    <Wrench className="size-3 text-emerald-400" /> Nguyên liệu cần:
+                  </p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {liveData.materials.map((mat, idx) => (
+                      <span key={idx} className="bg-slate-800 text-emerald-300 px-2 py-0.5 rounded-md text-[10px]">
+                        {mat}
+                      </span>
+                    ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center p-6">
