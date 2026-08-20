@@ -96,7 +96,7 @@ export function ArScanner({
           advanced: [{ zoom: newZoom } as any]
         })
       } catch (e) {
-        console.warn("Dùng scale CSS dự phòng cho zoom", e)
+        console.warn("Zoom error", e)
       }
     }
   }
@@ -139,11 +139,7 @@ export function ArScanner({
                 setLiveData({
                   wasteType: result.waste_type,
                   confidence: result.confidence,
-                  diyIdeas: result.diy_ideas || [
-                    { id: '1', title: 'Làm chậu cây mini', description: 'Cắt phần đầu chai...' },
-                    { id: '2', title: 'Hộp đựng bút', description: 'Sơn màu trang trí...' },
-                    { id: '3', title: 'Vòng đeo tay DIY', description: 'Cắt vòng từ thân chai...' }
-                  ]
+                  diyIdeas: result.diy_ideas || []
                 })
               } else {
                 setLiveData(null)
@@ -165,7 +161,7 @@ export function ArScanner({
     if (isLoading || errorMessage) return
     const interval = setInterval(() => {
       captureAndLiveScan()
-    }, 1500)
+    }, 2000)
     return () => clearInterval(interval)
   }, [isLoading, errorMessage, captureAndLiveScan])
 
@@ -189,52 +185,45 @@ export function ArScanner({
         </div>
 
         <div className="relative flex-1 overflow-hidden bg-black w-full h-full flex items-center justify-center">
-          <video ref={videoRef} playsInline muted className="h-full w-full object-cover" style={{ transform: trackCapabilities && !(trackCapabilities as any).zoom ? `scale(${zoomLevel})` : 'scale(1)' }} />
+          <video ref={videoRef} playsInline muted className="h-full w-full object-cover" />
           
           {isLoading && (!errorMessage) && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/80 text-white"><Loader2 className="size-6 animate-spin text-emerald-400" /><p className="text-xs">{t.arLoading}</p></div>}
           {errorMessage && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-slate-950/80 text-red-400 gap-2 text-xs"><AlertCircle className="size-8 text-red-500" /><span className="font-semibold text-slate-200">{errorMessage}</span></div>}
 
-          {/* KHUNG GỌN VÀ TRONG SUỐT Ở GÓC DƯỚI TRÁI */}
+          {/* KHUNG THÔNG TIN ĐÃ ĐƯỢC THU NHỎ (COMPACT & SCALED DOWN) */}
           {(!isLoading && !errorMessage && liveData) ? (
-            <div className="absolute bottom-4 left-4 z-20 rounded-2xl bg-slate-950/70 border border-white/10 p-3 text-white text-[11px] shadow-2xl backdrop-blur-xl w-[90vw] max-w-sm animate-in fade-in slide-in-from-bottom-3 duration-300">
-              <div className="flex items-center gap-2 mb-2.5 pb-2.5 border-b border-white/10">
-                <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  <CheckCircle2 className="size-4" />
+            <div className="absolute bottom-3 left-3 z-20 rounded-xl bg-slate-950/80 border border-white/10 p-2.5 text-white text-[10px] shadow-xl backdrop-blur-md w-[85vw] max-w-[260px] animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-white/10">
+                <div className="p-1 rounded bg-emerald-500/20 text-emerald-300">
+                  <CheckCircle2 className="size-3.5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm text-white">{liveData.wasteType}</h3>
-                  <p className="text-[10px] text-slate-400">Độ chính xác: {Math.round(liveData.confidence * 100)}%</p>
+                  <h3 className="font-bold text-xs text-white capitalize">{liveData.wasteType}</h3>
+                  <p className="text-[9px] text-slate-400">Độ tin cậy: {Math.round(liveData.confidence * 100)}%</p>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <p className="font-semibold text-slate-300 flex items-center gap-1.5 text-xs mb-2">
-                  <Zap className="size-3.5 text-amber-400" /> Bạn muốn tái chế thành gì?
+              <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                <p className="font-semibold text-slate-300 flex items-center gap-1 text-[10px]">
+                  <Zap className="size-3 text-amber-400" /> Ý tưởng tái chế:
                 </p>
                 
                 {liveData.diyIdeas.map((idea, index) => (
-                  <button 
-                    key={idea.id} 
-                    className="w-full text-left p-2.5 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 transition-all group active:scale-[0.98]"
-                  >
-                    <div className="flex justify-between items-start gap-2">
-                      <span className="font-semibold text-white group-hover:text-emerald-300">
-                        {index + 1}. {idea.title}
-                      </span>
-                      <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Chọn</span>
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-1 pr-6 line-clamp-2">
+                  <div key={idea.id || index} className="p-1.5 rounded-lg bg-white/5 border border-white/5">
+                    <span className="font-semibold text-emerald-300 block text-[10px]">
+                      {index + 1}. {idea.title}
+                    </span>
+                    <p className="text-[9px] text-slate-400 line-clamp-1 mt-0.5">
                       {idea.description}
                     </p>
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>
           ) : (
-            // Đã xóa backdrop-blur ở đây để màn hình camera ở giữa hoàn toàn trong suốt không bị mờ
             <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center p-6">
-              <div className="relative w-48 h-48 rounded-3xl border-2 border-dashed border-white/20 bg-transparent flex items-center justify-center">
-                <span className="rounded-full bg-black/60 px-3 py-1 text-[11px] font-medium text-white backdrop-blur-md">
+              <div className="relative w-40 h-40 rounded-2xl border-2 border-dashed border-white/20 bg-transparent flex items-center justify-center">
+                <span className="rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur-md">
                   {isScanning ? t.arScanning : t.arAimCamera}
                 </span>
               </div>
@@ -243,12 +232,12 @@ export function ArScanner({
         </div>
 
         {/* Footer bar */}
-        <div className="z-30 flex items-center justify-between gap-4 bg-slate-950 p-3 border-t border-white/10">
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Sparkles className="size-4 shrink-0 text-emerald-400" />
-            <span>{liveData ? "Quét thành công. Vui lòng chọn ý tưởng bên trái." : t.arFrameHint}</span>
+        <div className="z-30 flex items-center justify-between gap-2 bg-slate-950 px-3 py-2 border-t border-white/10">
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+            <Sparkles className="size-3.5 shrink-0 text-emerald-400" />
+            <span>{liveData ? "Đã nhận diện thành công vật thể." : t.arFrameHint}</span>
           </div>
-          <button onClick={onClose} className="rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 font-medium px-4 py-2 text-xs transition-all border border-white/10">
+          <button onClick={onClose} className="rounded-lg bg-white/5 hover:bg-white/10 text-slate-200 font-medium px-3 py-1 text-[11px] transition-all border border-white/10">
             {t.arClose}
           </button>
         </div>
