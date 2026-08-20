@@ -1,19 +1,17 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
-import { X, Loader2, Sparkles, AlertCircle, RefreshCw, CheckCircle2, ZoomIn, Wrench } from "lucide-react"
+import { X, Loader2, Sparkles, AlertCircle, RefreshCw, CheckCircle2, ZoomIn, Zap } from "lucide-react"
 import type { Dict } from "@/lib/dictionary"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export function ArScanner({
   onClose,
-  onAnalyzeFile,
   t,
   lang,
 }: {
   onClose: () => void
-  onAnalyzeFile?: (file: File) => void
   t: Dict
   lang: "vi" | "en"
 }) {
@@ -26,13 +24,12 @@ export function ArScanner({
   const [zoomLevel, setZoomLevel] = useState<number>(1)
   const [trackCapabilities, setTrackCapabilities] = useState<MediaTrackCapabilities | null>(null)
 
+  // Cập nhật interface để lưu danh sách ý tưởng DIY
   const [liveData, setLiveData] = useState<{
     wasteType: string
-    category: string
     confidence: number
-    quickGuide: string
-    materials?: string[]
-    steps?: string[]
+    // Thay đổi quickGuide thành mảng ý tưởng DIY
+    diyIdeas: { id: string, title: string, description: string }[]
   } | null>(null)
 
   useEffect(() => {
@@ -133,7 +130,8 @@ export function ArScanner({
           formData.append("lang", lang)
 
           try {
-            const response = await fetch(`${API_URL}/api/ar-detect`, {
+            // Giả lập gọi API nhận diện rác và trả về ý tưởng DIY
+            const response = await fetch(`${API_URL}/api/ar-detect-diy`, {
               method: "POST",
               body: formData,
             })
@@ -143,11 +141,13 @@ export function ArScanner({
               if (result.has_waste) {
                 setLiveData({
                   wasteType: result.waste_type,
-                  category: result.category,
                   confidence: result.confidence,
-                  quickGuide: result.quick_guide,
-                  materials: result.materials,
-                  steps: result.steps,
+                  // Cấu trúc mới: API trả về array các ý tưởng
+                  diyIdeas: result.diy_ideas || [
+                    { id: '1', title: 'Làm chậu cây mini', description: 'Cắt phần đầu chai...' }, // Dữ liệu mẫu
+                    { id: '2', title: 'Hộp đựng bút', description: 'Sơn màu trang trí...' },
+                    { id: '3', title: 'Vòng đeo tay DIY', description: 'Cắt vòng từ thân chai...' }
+                  ]
                 })
               } else {
                 setLiveData(null)
@@ -169,7 +169,7 @@ export function ArScanner({
     if (isLoading || errorMessage) return
     const interval = setInterval(() => {
       captureAndLiveScan()
-    }, 1200)
+    }, 1500) // Tăng thời gian quét tí xíu để đỡ lag
     return () => clearInterval(interval)
   }, [isLoading, errorMessage, captureAndLiveScan])
 
@@ -178,92 +178,79 @@ export function ArScanner({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-2 sm:p-4 backdrop-blur-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-2 sm:p-4 backdrop-blur-sm">
       <div className="relative flex h-full max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-950 shadow-2xl">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 z-30 rounded-full bg-black/60 p-2.5 text-white hover:bg-black/80 transition-colors"
-        >
-          <X className="size-5" />
-        </button>
+        <button onClick={onClose} className="absolute top-4 right-4 z-30 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 transition-colors"><X className="size-4" /></button>
+        <button onClick={toggleCamera} className="absolute top-4 left-4 z-30 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 transition-colors" title={t.arSwitchCamera}><RefreshCw className="size-4" /></button>
 
-        <button
-          onClick={toggleCamera}
-          className="absolute top-4 left-4 z-30 rounded-full bg-black/60 p-2.5 text-white hover:bg-black/80 transition-colors"
-          title={t.arSwitchCamera}
-        >
-          <RefreshCw className="size-5" />
-        </button>
-
-        {/* Thanh chọn mức Zoom nhanh */}
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-white text-xs font-medium">
-          <ZoomIn className="size-3.5 text-emerald-400" />
-          <span>{t.arZoom}</span>
-          <button onClick={() => handleZoomChange(1)} className={`px-2 py-0.5 rounded-full transition-colors ${zoomLevel === 1 ? 'bg-emerald-500 text-slate-950 font-bold' : 'hover:bg-white/20'}`}>1x</button>
-          <button onClick={() => handleZoomChange(2)} className={`px-2 py-0.5 rounded-full transition-colors ${zoomLevel === 2 ? 'bg-emerald-500 text-slate-950 font-bold' : 'hover:bg-white/20'}`}>2x</button>
-          <button onClick={() => handleZoomChange(3)} className={`px-2 py-0.5 rounded-full transition-colors ${zoomLevel === 3 ? 'bg-emerald-500 text-slate-950 font-bold' : 'hover:bg-white/20'}`}>3x</button>
+        {/* Zoom controls */}
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-white text-[11px] font-medium">
+          <ZoomIn className="size-3 text-emerald-400" />
+          <span>Zoom</span>
+          {[1,2,3].map(z => (
+             <button key={z} onClick={() => handleZoomChange(z)} className={`px-2 py-0.5 rounded-full transition-colors ${zoomLevel === z ? 'bg-emerald-500 text-slate-950 font-bold' : 'hover:bg-white/20'}`}>{z}x</button>
+          ))}
         </div>
 
         <div className="relative flex-1 overflow-hidden bg-black w-full h-full flex items-center justify-center">
-          <video
-            ref={videoRef}
-            playsInline
-            muted
-            className="h-full w-full object-cover transition-transform duration-200"
-            style={{
-              transform: trackCapabilities && !(trackCapabilities as any).zoom ? `scale(${zoomLevel})` : 'scale(1)'
-            }}
-          />
+          <video ref={videoRef} playsInline muted className="h-full w-full object-cover" style={{ transform: trackCapabilities && !(trackCapabilities as any).zoom ? `scale(${zoomLevel})` : 'scale(1)' }} />
+          
+          {isLoading && (!errorMessage) && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/80 text-white"><Loader2 className="size-6 animate-spin text-emerald-400" /><p className="text-xs">{t.arLoading}</p></div>}
+          {errorMessage && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-slate-950/80 text-red-400 gap-2 text-xs"><AlertCircle className="size-8 text-red-500" /><span className="font-semibold text-slate-200">{errorMessage}</span></div>}
 
-          {isLoading && !errorMessage && (
-            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-slate-900 text-white">
-              <Loader2 className="size-8 animate-spin text-emerald-400" />
-              <p className="text-sm font-medium">{t.arLoading}</p>
-            </div>
-          )}
-
-          {errorMessage && (
-            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-slate-900 text-red-400 gap-3 text-sm">
-              <AlertCircle className="size-10 text-red-500" />
-              <span className="font-semibold text-slate-200">{errorMessage}</span>
-            </div>
-          )}
-
-          {/* HIỂN THỊ THÔNG TIN Ở GÓC DƯỚI BÊN TRÁI (ĐÃ BỎ BOUNDING BOX) */}
-          {!isLoading && !errorMessage && liveData ? (
-            <div className="absolute bottom-4 left-4 z-20 rounded-2xl bg-slate-900/90 border border-emerald-500/50 p-3 text-white text-xs shadow-2xl backdrop-blur-md w-[85vw] max-w-xs animate-in fade-in slide-in-from-bottom-3 duration-200">
-              {/* Tên vật phẩm & Độ chính xác */}
-              <div className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-2.5 py-1 text-slate-950 font-bold text-xs shadow-md mb-2 w-fit">
-                <CheckCircle2 className="size-3.5" />
-                <span>{liveData.wasteType} ({Math.round(liveData.confidence * 100)}%)</span>
+          {/* GIAO DIỆN MỚI: GỌN VÀ TRONG SUỐT HƠN Ở GÓC DƯỚI TRÁI */}
+          {(!isLoading && !errorMessage && liveData) ? (
+            <div className="absolute bottom-4 left-4 z-20 rounded-2xl bg-slate-950/70 border border-white/10 p-3 text-white text-[11px] shadow-2xl backdrop-blur-xl w-[90vw] max-w-sm animate-in fade-in slide-in-from-bottom-3 duration-300">
+              {/* Header: Tên vật phẩm */}
+              <div className="flex items-center gap-2 mb-2.5 pb-2.5 border-b border-white/10">
+                <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  <CheckCircle2 className="size-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">{liveData.wasteType}</h3>
+                  <p className="text-[10px] text-slate-400">Độ chính xác: {Math.round(liveData.confidence * 100)}%</p>
+                </div>
               </div>
 
-              {/* Hướng dẫn nhanh */}
-              <p className="font-medium text-slate-200 mb-1 flex items-start gap-1">
-                <Sparkles className="size-3.5 text-emerald-400 shrink-0 mt-0.5" /> 
-                <span>{liveData.quickGuide}</span>
-              </p>
-
-              {/* Phần hiển thị nguyên liệu (Materials) */}
-              {liveData.materials && liveData.materials.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-slate-800">
-                  <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1">
-                    <Wrench className="size-3 text-emerald-400" /> Nguyên liệu cần:
-                  </p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {liveData.materials.map((mat, idx) => (
-                      <span key={idx} className="bg-slate-800 text-emerald-300 px-2 py-0.5 rounded-md text-[10px]">
-                        {mat}
+              {/* Phần 3 Lựa chọn DIY (Đây là chỗ bạn cần xử lý data) */}
+              <div className="space-y-2">
+                <p className="font-semibold text-slate-300 flex items-center gap-1.5 text-xs mb-2">
+                  <Zap className="size-3.5 text-amber-400" /> Bạn muốn tái chế thành gì?
+                </p>
+                
+                {liveData.diyIdeas.map((idea, index) => (
+                  <button 
+                    key={idea.id} 
+                    className="w-full text-left p-2.5 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 transition-all group active:scale-[0.98]"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <span className="font-semibold text-white group-hover:text-emerald-300">
+                        {index + 1}. {idea.title}
                       </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+                      <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Chọn</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1 pr-6 line-clamp-2">
+                      {idea.description}
+                    </p>
+                  </button>
+                ))}
+              </div>
+
+               {/* NGUYÊN LIỆU CẦN (Bỏ comment nếu muốn hiện lại) */}
+               {/* 
+               <div className="mt-3 pt-3 border-t border-white/10">
+                 <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1"><Wrench className="size-3 text-emerald-400"/> Nguyên liệu chính:</p>
+                 <div className="flex flex-wrap gap-1 mt-1.5">
+                   {['Chai nhựa', 'Kéo', 'Băng keo'].map(mat => <span key={mat} className="bg-slate-700/50 text-emerald-200 px-2 py-0.5 rounded-md text-[10px]">{mat}</span>)}
+                 </div>
+               </div> 
+               */}
             </div>
           ) : (
+            // Placeholder khi đang quét
             <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center p-6">
-              <div className="relative w-64 h-64 rounded-3xl border-2 border-dashed border-white/30 bg-white/5 flex items-center justify-center">
-                <span className="rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white backdrop-blur-md">
+              <div className="relative w-48 h-48 rounded-3xl border-2 border-dashed border-white/20 bg-white/5 backdrop-blur-sm flex items-center justify-center">
+                <span className="rounded-full bg-black/50 px-3 py-1 text-[11px] font-medium text-white backdrop-blur-md">
                   {isScanning ? t.arScanning : t.arAimCamera}
                 </span>
               </div>
@@ -271,16 +258,13 @@ export function ArScanner({
           )}
         </div>
 
-        <div className="z-30 flex items-center justify-between gap-4 bg-slate-900 p-4 sm:p-5 border-t border-slate-800">
+        {/* Footer bar */}
+        <div className="z-30 flex items-center justify-between gap-4 bg-slate-950 p-3 border-t border-white/10">
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <Sparkles className="size-4 shrink-0 text-emerald-400" />
-            <span>{liveData ? t.arLiveGuidance : t.arFrameHint}</span>
+            <span>{liveData ? "Quét thành công. Vui lòng chọn ý tưởng bên trái." : t.arFrameHint}</span>
           </div>
-
-          <button
-            onClick={onClose}
-            className="rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-5 py-2.5 text-sm transition-all"
-          >
+          <button onClick={onClose} className="rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 font-medium px-4 py-2 text-xs transition-all border border-white/10">
             {t.arClose}
           </button>
         </div>
