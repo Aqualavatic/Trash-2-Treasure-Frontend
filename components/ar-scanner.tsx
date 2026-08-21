@@ -18,27 +18,21 @@ export function ArScanner({
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isScanning, setIsScanning] = useState(false)
+  const [isGeneratingGemini, setIsGeneratingGemini] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment")
   
   const [zoomLevel, setZoomLevel] = useState<number>(1)
 
-  const [liveData, setLiveData] = useState<{
-    wasteType: string
-    confidence: number
-    objects: { waste_type: string; confidence: number; box: number[] }[]
-    diyIdeas: { 
-      id: string, 
-      title: string, 
-      description: string, 
-      materials?: string[],
-      steps?: string[] 
-    }[]
-  } | null>(null)
-
+  const [objects, setObjects] = useState<{ waste_type: string; confidence: number; box: number[] }[]>([])
+  const [diyIdeas, setDiyIdeas] = useState<any[]>([])
   const [selectedIdea, setSelectedIdea] = useState<any | null>(null)
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(0)
   const [stepVerified, setStepVerified] = useState<boolean>(false)
+
+  // Bộ đếm ổn định để quyết định khi nào Snap gửi Gemini
+  const stableCountRef = useRef(0)
+  const hasSnappedRef = useRef(false)
 
   useEffect(() => {
     let stream: MediaStream | null = null
@@ -106,8 +100,9 @@ export function ArScanner({
     }
   }
 
+  // 1. YOLO Real-time Scan để bắt bounding box và chờ ổn định
   const captureAndLiveScan = useCallback(async () => {
-    if (!videoRef.current || isScanning || isLoading) return
+    if (!videoRef.current || isScanning || isLoading || hasSnappedRef.current || selectedIdea) return
     const video = videoRef.current
     if (video.videoWidth === 0 || video.videoHeight === 0) return
 
@@ -130,7 +125,6 @@ export function ArScanner({
           const file = new File([blob], "ar_live.jpg", { type: "image/jpeg" })
           const formData = new FormData()
           formData.append("file", file)
-          formData.append("lang", lang)
 
           try {
             const response = await fetch(`${API_URL}/api/ar-detect`, {
@@ -140,28 +134,22 @@ export function ArScanner({
 
             if (response.ok) {
               const result = await response.json()
-              if (result.has_waste) {
-                setLiveData(prev => ({
-                  wasteType: result.waste_type,
-                  confidence: result.confidence,
-                  objects: result.objects || [],
-                  diyIdeas: prev?.diyIdeas?.length ? prev.diyIdeas : (result.diy_ideas || [])
-                }))
+              if (result.has_waste && result.objects?.length > 0) {
+                setObjects(result.objects)
+                stableCountRef.current += 1
 
-                // Kiểm tra tương tác bước hiện tại với vật thể YOLO phát hiện
-                if (selectedIdea && selectedIdea.steps && selectedIdea.steps[currentStepIndex]) {
-                  const currentStepText = selectedIdea.steps[currentStepIndex].toLowerCase()
-                  const detectedClasses = (result.objects || []).map((o: any) => o.waste_type.toLowerCase())
-                  
-                  const matched = detectedClasses.some((cls: string) => currentStepText.includes(cls) || cls.includes("scissors") || cls.includes("bottle"));
-                  if (matched) {
-                    setStepVerified(true)
-                  }
+                // Khi YOLO quét ổn định qua 2 khung hình liên tiếp -> Snap gửi sang Gemini 1 lần duy nhất
+                if (stableCountRef.current >= 2 && !hasSnappedRef.current) {
+                  hasSnappedRef.current = true
+                  await snapAndGenerateGeminiIdeas(file, result.objects)
                 }
+              } else {
+                setObjects([])
+                stableCountRef.current = 0
               }
             }
           } catch (err) {
-            console.error("Lỗi kết nối YOLO AR:", err)
+            console.error("Lỗi YOLO AR:", err)
           } finally {
             setIsScanning(false)
           }
@@ -170,19 +158,102 @@ export function ArScanner({
     } catch (e) {
       setIsScanning(false)
     }
-  }, [isScanning, isLoading, lang, selectedIdea, currentStepIndex])
+  }, [isScanning, isLoading, selectedIdea])
+
+  // 2. Hàm Snap gửi ảnh sang Gemini tạo 3 ý tưởng DIY kèm bước thực hiện
+  const snapAndGenerateGeminiIdeas = async (imageFile: File, detectedObjs: any[]) => {
+    setIsGeneratingGemini(true)
+    try {
+      const uniqueItems = Array.from(new Set(detectedObjs.map(o => o.waste_type))).join(", ")
+      const formData = new FormData()
+      formData.append("file", imageFile)
+      formData.append("items", uniqueItems)
+
+      const res = await fetch(`${API_URL}/api/generate-diy-options`, {
+        method: "POST",
+        body: formData,
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success && data.diy_ideas) {
+          setDiyIdeas(data.diy_ideas)
+        }
+      }
+    } catch (e) {
+      console.error("Lỗi khi gọi Gemini tạo options:", e)
+    } finally {
+      setIsGeneratingGemini(false)
+    }
+  }
+
+  // 3. Logic "Cầm tay chỉ việc": Kiểm tra vật dụng user đưa lên có khớp với bước hiện tại không
+  const checkInteractionStep = useCallback(async () => {
+    if (!videoRef.current || !selectedIdea || isScanning || isLoading) return
+    const video = videoRef.current
+    if (video.videoWidth === 0 || video.videoHeight === 0) return
+
+    try {
+      const canvas = document.createElement("canvas")
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      const ctx = canvas.getContext("2d")
+      
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        canvas.toBlob(async (blob) => {
+          if (!blob) return
+          const file = new File([blob], "step_check.jpg", { type: "image/jpeg" })
+          const formData = new FormData()
+          formData.append("file", file)
+
+          const response = await fetch(`${API_URL}/api/ar-detect`, {
+            method: "POST",
+            body: formData,
+          })
+
+          if (response.ok) {
+            const result = await response.json()
+            if (result.has_waste && result.objects) {
+              setObjects(result.objects)
+              const currentStepText = (selectedIdea.steps?[currentStepIndex] || "").toLowerCase()
+              const detectedClasses = result.objects.map((o: any) => o.waste_type.toLowerCase())
+
+              const matched = detectedClasses.some((cls: string) => currentStepText.includes(cls) || cls.includes("scissors") || cls.includes("bottle") || cls.includes("pen"));
+              if (matched) {
+                setStepVerified(true)
+              }
+            }
+          }
+        }, "image/jpeg", 0.75)
+      }
+    } catch (e) {
+      console.error("Lỗi check bước tương tác:", e)
+    }
+  }, [selectedIdea, currentStepIndex, isScanning, isLoading])
 
   useEffect(() => {
     if (isLoading || errorMessage) return
-    // Rút ngắn thời gian quét xuống 2 giây nhờ tốc độ siêu nhanh của YOLO
     const interval = setInterval(() => {
-      captureAndLiveScan()
+      if (selectedIdea) {
+        checkInteractionStep()
+      } else {
+        captureAndLiveScan()
+      }
     }, 2000)
     return () => clearInterval(interval)
-  }, [isLoading, errorMessage, captureAndLiveScan])
+  }, [isLoading, errorMessage, selectedIdea, captureAndLiveScan, checkInteractionStep])
 
   const toggleCamera = () => {
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"))
+  }
+
+  const handleResetScan = () => {
+    hasSnappedRef.current = false
+    stableCountRef.current = 0
+    setDiyIdeas([])
+    setSelectedIdea(null)
+    setObjects([])
   }
 
   return (
@@ -203,8 +274,8 @@ export function ArScanner({
         <div className="relative flex-1 overflow-hidden bg-black w-full h-full flex items-center justify-center">
           <video ref={videoRef} playsInline muted className="h-full w-full object-cover" />
           
-          {/* Bounding Boxes từ YOLO-World / Roboflow */}
-          {liveData?.objects && liveData.objects.map((obj, idx) => {
+          {/* Bounding Boxes YOLO */}
+          {objects.map((obj, idx) => {
             const [ymin, xmin, ymax, xmax] = obj.box;
             return (
               <div
@@ -221,17 +292,21 @@ export function ArScanner({
           })}
 
           {isLoading && (!errorMessage) && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/80 text-white"><Loader2 className="size-6 animate-spin text-emerald-400" /><p className="text-xs">{t.arLoading}</p></div>}
+          {isGeneratingGemini && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/85 text-white"><Loader2 className="size-8 animate-spin text-amber-400" /><p className="text-xs font-medium">Gemini đang sáng tạo ý tưởng DIY từ vật thể...</p></div>}
           {errorMessage && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-slate-950/80 text-red-400 gap-2 text-xs"><AlertCircle className="size-8 text-red-500" /><span className="font-semibold text-slate-200">{errorMessage}</span></div>}
 
-          {/* Chọn ý tưởng DIY */}
-          {!selectedIdea && (!isLoading && !errorMessage && liveData) ? (
+          {/* Hiển thị danh sách options do Gemini tạo sau khi Snap */}
+          {!selectedIdea && diyIdeas.length > 0 && (
             <div className="absolute bottom-3 left-3 right-3 z-20 rounded-xl bg-slate-950/90 border border-white/15 p-3 text-white text-[11px] shadow-xl backdrop-blur-md max-h-[220px] overflow-y-auto">
-              <div className="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-white/10">
-                <Zap className="size-4 text-amber-400" />
-                <h3 className="font-bold text-xs text-white">Ý tưởng UpcycleDIY kết hợp từ YOLO:</h3>
+              <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-white/10">
+                <div className="flex items-center gap-1.5">
+                  <Zap className="size-4 text-amber-400" />
+                  <h3 className="font-bold text-xs text-white">Ý tưởng UpcycleDIY từ Gemini:</h3>
+                </div>
+                <button onClick={handleResetScan} className="text-[10px] text-emerald-400 underline">Quét lại</button>
               </div>
               <div className="space-y-2">
-                {liveData.diyIdeas.map((idea, index) => (
+                {diyIdeas.map((idea, index) => (
                   <div 
                     key={idea.id || index} 
                     onClick={() => {
@@ -254,9 +329,9 @@ export function ArScanner({
                 ))}
               </div>
             </div>
-          ) : null}
+          )}
 
-          {/* Hướng dẫn từng bước tương tác */}
+          {/* Hướng dẫn tương tác từng bước (Cầm tay chỉ việc) */}
           {selectedIdea && (
             <div className="absolute bottom-3 left-3 right-3 z-20 rounded-xl bg-slate-950/95 border border-emerald-500/40 p-3 text-white text-[11px] shadow-2xl backdrop-blur-md">
               <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-white/10">
@@ -273,13 +348,13 @@ export function ArScanner({
 
               <div className="space-y-2 my-2">
                 <p className="text-xs font-medium text-slate-200 bg-white/5 p-2 rounded-lg border border-white/5">
-                  👉 {selectedIdea.steps?.[currentStepIndex] || "Thực hiện thao tác thủ công theo yêu cầu."}
+                  👉 {selectedIdea.steps?.[currentStepIndex] || "Thực hiện thao tác thủ công."}
                 </p>
 
                 <div className="flex items-center justify-between text-[10px]">
                   <span className={stepVerified ? "text-emerald-400 font-bold flex items-center gap-1" : "text-amber-400 flex items-center gap-1"}>
                     <CheckCircle2 className="size-3.5" />
-                    {stepVerified ? "YOLO đã nhận diện vật dụng! Đã xong bước này." : "Đang quét vật dụng qua camera..."}
+                    {stepVerified ? "YOLO đã nhận diện vật dụng! Đã hoàn thành bước." : "Đang chờ bạn đưa dụng cụ vào khung hình..."}
                   </span>
                   
                   <div className="flex gap-1.5">
@@ -297,8 +372,8 @@ export function ArScanner({
                           setCurrentStepIndex(prev => prev + 1);
                           setStepVerified(false);
                         } else {
-                          alert("🎉 Chúc mừng bạn đã hoàn thành xuất sắc sản phẩm UpcycleDIY!");
-                          setSelectedIdea(null);
+                          alert("🎉 Chúc mừng bạn đã hoàn thành dự án UpcycleDIY!");
+                          handleResetScan();
                         }
                       }}
                       className="px-3 py-1 rounded bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold transition-all"
@@ -311,7 +386,7 @@ export function ArScanner({
             </div>
           )}
 
-          {!selectedIdea && !liveData && (
+          {!selectedIdea && diyIdeas.length === 0 && !isGeneratingGemini && (
             <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center p-6">
               <div className="relative w-40 h-40 rounded-2xl border-2 border-dashed border-white/20 bg-transparent flex items-center justify-center">
                 <span className="rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur-md">
@@ -326,7 +401,7 @@ export function ArScanner({
         <div className="z-30 flex items-center justify-between gap-2 bg-slate-950 px-3 py-2 border-t border-white/10">
           <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
             <Sparkles className="size-3.5 shrink-0 text-emerald-400" />
-            <span>{selectedIdea ? "Chế độ hướng dẫn tương tác YOLO AR Active" : t.arFrameHint}</span>
+            <span>{selectedIdea ? "Chế độ tương tác YOLO AR Active" : "Đang quét vật thể qua YOLO..."}</span>
           </div>
           <button onClick={onClose} className="rounded-lg bg-white/5 hover:bg-white/10 text-slate-200 font-medium px-3 py-1 text-[11px] transition-all border border-white/10">
             {t.arClose}
