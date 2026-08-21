@@ -19,7 +19,7 @@ const manrope = Manrope({
 export const metadata: Metadata = {
   title: 'UpcycleDIY — Trợ lý tái chế AI tại nhà',
   description:
-    'Chụp ảnh rác thải và nhận gợi ý tái chế DIY thông minh, được hỗ trợ bởi Intel OpenVINO. Hướng dẫn từng bước, đọc bằng giọng nói và chế độ an toàn cho trẻ em.',
+    'Chụp ảnh rác thải và nhận gợi ý tái chế DIY thông minh. Hướng dẫn từng bước, đọc bằng giọng nói và chế độ an toàn cho trẻ em.',
   generator: '',
 }
 
