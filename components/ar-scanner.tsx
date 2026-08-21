@@ -160,7 +160,7 @@ export function ArScanner({
                 setObjects(result.objects)
                 stableCountRef.current += 1
 
-                if (stableCountRef.current >= 2 && !hasSnappedRef.current) {
+                if (stableCountRef.current >= 1 && !hasSnappedRef.current) {
                   hasSnappedRef.current = true
                   await snapAndGenerateGeminiIdeas(file, result.objects)
                 }
