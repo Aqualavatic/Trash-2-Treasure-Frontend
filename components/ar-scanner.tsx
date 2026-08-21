@@ -67,7 +67,7 @@ export function ArScanner({
 
         if (isMounted) setIsLoading(false)
       } catch (err: any) {
-        console.error("Lỗi Camera:", err)
+        console.error(err)
         if (!isMounted) return
         setErrorMessage(t.arCameraError)
         setIsLoading(false)
@@ -94,7 +94,7 @@ export function ArScanner({
           advanced: [{ zoom: newZoom } as any]
         })
       } catch (e) {
-        console.warn("Zoom error", e)
+        console.warn(e)
       }
     }
   }
@@ -146,7 +146,7 @@ export function ArScanner({
               }
             }
           } catch (err) {
-            console.error("Lỗi YOLO AR:", err)
+            console.error(err)
           } finally {
             setIsScanning(false)
           }
@@ -177,7 +177,7 @@ export function ArScanner({
         }
       }
     } catch (e) {
-      console.error("Lỗi khi gọi Gemini tạo options:", e)
+      console.error(e)
     } finally {
       setIsGeneratingGemini(false)
     }
@@ -211,10 +211,11 @@ export function ArScanner({
             const result = await response.json()
             if (result.has_waste && result.objects) {
               setObjects(result.objects)
-              const currentStepText = (selectedIdea.steps?[currentStepIndex] || "").toLowerCase()
+              const stepsList = selectedIdea.steps || []
+              const currentStepText = (stepsList[currentStepIndex] || "").toLowerCase()
               const detectedClasses = result.objects.map((o: any) => o.waste_type.toLowerCase())
 
-              const matched = detectedClasses.some((cls: string) => currentStepText.includes(cls) || cls.includes("scissors") || cls.includes("bottle") || cls.includes("pen"));
+              const matched = detectedClasses.some((cls: string) => currentStepText.includes(cls) || cls.includes("scissors") || cls.includes("bottle") || cls.includes("pen"))
               if (matched) {
                 setStepVerified(true)
               }
@@ -223,7 +224,7 @@ export function ArScanner({
         }, "image/jpeg", 0.75)
       }
     } catch (e) {
-      console.error("Lỗi check bước tương tác:", e)
+      console.error(e)
     }
   }, [selectedIdea, currentStepIndex, isScanning, isLoading])
 
@@ -257,7 +258,6 @@ export function ArScanner({
         <button onClick={onClose} className="absolute top-4 right-4 z-30 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 transition-colors"><X className="size-4" /></button>
         <button onClick={toggleCamera} className="absolute top-4 left-4 z-30 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 transition-colors" title={t.arSwitchCamera}><RefreshCw className="size-4" /></button>
 
-        {/* Zoom controls */}
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-white text-[11px] font-medium">
           <ZoomIn className="size-3 text-emerald-400" />
           <span>Zoom</span>
@@ -269,9 +269,8 @@ export function ArScanner({
         <div className="relative flex-1 overflow-hidden bg-black w-full h-full flex items-center justify-center">
           <video ref={videoRef} playsInline muted className="h-full w-full object-cover" />
           
-          {/* Bounding Boxes YOLO */}
           {objects.map((obj, idx) => {
-            const [ymin, xmin, ymax, xmax] = obj.box;
+            const [ymin, xmin, ymax, xmax] = obj.box
             return (
               <div
                 key={idx}
@@ -287,27 +286,26 @@ export function ArScanner({
           })}
 
           {isLoading && (!errorMessage) && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/80 text-white"><Loader2 className="size-6 animate-spin text-emerald-400" /><p className="text-xs">{t.arLoading}</p></div>}
-          {isGeneratingGemini && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/85 text-white"><Loader2 className="size-8 animate-spin text-amber-400" /><p className="text-xs font-medium">Gemini đang sáng tạo ý tưởng DIY từ vật thể...</p></div>}
+          {isGeneratingGemini && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/85 text-white"><Loader2 className="size-8 animate-spin text-amber-400" /><p className="text-xs font-medium">Gemini is generating DIY ideas...</p></div>}
           {errorMessage && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-slate-950/80 text-red-400 gap-2 text-xs"><AlertCircle className="size-8 text-red-500" /><span className="font-semibold text-slate-200">{errorMessage}</span></div>}
 
-          {/* Hiển thị danh sách options do Gemini tạo sau khi Snap */}
           {!selectedIdea && diyIdeas.length > 0 && (
             <div className="absolute bottom-3 left-3 right-3 z-20 rounded-xl bg-slate-950/90 border border-white/15 p-3 text-white text-[11px] shadow-xl backdrop-blur-md max-h-[220px] overflow-y-auto">
               <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-white/10">
                 <div className="flex items-center gap-1.5">
                   <Zap className="size-4 text-amber-400" />
-                  <h3 className="font-bold text-xs text-white">Ý tưởng UpcycleDIY từ Gemini:</h3>
+                  <h3 className="font-bold text-xs text-white">UpcycleDIY Ideas from Gemini:</h3>
                 </div>
-                <button onClick={handleResetScan} className="text-[10px] text-emerald-400 underline">Quét lại</button>
+                <button onClick={handleResetScan} className="text-[10px] text-emerald-400 underline">Scan Again</button>
               </div>
               <div className="space-y-2">
                 {diyIdeas.map((idea, index) => (
                   <div 
                     key={idea.id || index} 
                     onClick={() => {
-                      setSelectedIdea(idea);
-                      setCurrentStepIndex(0);
-                      setStepVerified(false);
+                      setSelectedIdea(idea)
+                      setCurrentStepIndex(0)
+                      setStepVerified(false)
                     }}
                     className="p-2 rounded-lg bg-white/5 hover:bg-emerald-500/20 border border-white/10 cursor-pointer transition-all flex items-center justify-between group"
                   >
@@ -326,7 +324,6 @@ export function ArScanner({
             </div>
           )}
 
-          {/* Hướng dẫn tương tác từng bước (Cầm tay chỉ việc) */}
           {selectedIdea && (
             <div className="absolute bottom-3 left-3 right-3 z-20 rounded-xl bg-slate-950/95 border border-emerald-500/40 p-3 text-white text-[11px] shadow-2xl backdrop-blur-md">
               <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-white/10">
@@ -337,43 +334,43 @@ export function ArScanner({
                   <h3 className="font-bold text-xs text-emerald-400 line-clamp-1">{selectedIdea.title}</h3>
                 </div>
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-medium">
-                  Bước {currentStepIndex + 1} / {selectedIdea.steps?.length || 3}
+                  Step {currentStepIndex + 1} / {selectedIdea.steps?.length || 3}
                 </span>
               </div>
 
               <div className="space-y-2 my-2">
                 <p className="text-xs font-medium text-slate-200 bg-white/5 p-2 rounded-lg border border-white/5">
-                  👉 {selectedIdea.steps?.[currentStepIndex] || "Thực hiện thao tác thủ công."}
+                  {selectedIdea.steps && selectedIdea.steps[currentStepIndex] ? selectedIdea.steps[currentStepIndex] : "Perform manual action."}
                 </p>
 
                 <div className="flex items-center justify-between text-[10px]">
                   <span className={stepVerified ? "text-emerald-400 font-bold flex items-center gap-1" : "text-amber-400 flex items-center gap-1"}>
                     <CheckCircle2 className="size-3.5" />
-                    {stepVerified ? "YOLO đã nhận diện vật dụng! Đã hoàn thành bước." : "Đang chờ bạn đưa dụng cụ vào khung hình..."}
+                    {stepVerified ? "Object detected! Step completed." : "Waiting for item in frame..."}
                   </span>
                   
                   <div className="flex gap-1.5">
                     {currentStepIndex > 0 && (
                       <button 
-                        onClick={() => { setCurrentStepIndex(prev => prev - 1); setStepVerified(false); }}
+                        onClick={() => { setCurrentStepIndex(prev => prev - 1); setStepVerified(false) }}
                         className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-medium"
                       >
-                        Quay lại
+                        Back
                       </button>
                     )}
                     <button 
                       onClick={() => {
                         if (selectedIdea.steps && currentStepIndex < selectedIdea.steps.length - 1) {
-                          setCurrentStepIndex(prev => prev + 1);
-                          setStepVerified(false);
+                          setCurrentStepIndex(prev => prev + 1)
+                          setStepVerified(false)
                         } else {
-                          alert("🎉 Chúc mừng bạn đã hoàn thành dự án UpcycleDIY!");
-                          handleResetScan();
+                          alert("Congratulations on completing your UpcycleDIY project!")
+                          handleResetScan()
                         }
                       }}
                       className="px-3 py-1 rounded bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold transition-all"
                     >
-                      {currentStepIndex < (selectedIdea.steps?.length || 3) - 1 ? "Bước tiếp" : "Hoàn thành 🎉"}
+                      {currentStepIndex < (selectedIdea.steps?.length || 3) - 1 ? "Next Step" : "Complete"}
                     </button>
                   </div>
                 </div>
@@ -392,11 +389,10 @@ export function ArScanner({
           )}
         </div>
 
-        {/* Footer bar */}
         <div className="z-30 flex items-center justify-between gap-2 bg-slate-950 px-3 py-2 border-t border-white/10">
           <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
             <Sparkles className="size-3.5 shrink-0 text-emerald-400" />
-            <span>{selectedIdea ? "Chế độ tương tác YOLO AR Active" : "Đang quét vật thể qua YOLO..."}</span>
+            <span>{selectedIdea ? "YOLO AR Active Interaction Mode" : "Scanning objects via YOLO..."}</span>
           </div>
           <button onClick={onClose} className="rounded-lg bg-white/5 hover:bg-white/10 text-slate-200 font-medium px-3 py-1 text-[11px] transition-all border border-white/10">
             {t.arClose}
