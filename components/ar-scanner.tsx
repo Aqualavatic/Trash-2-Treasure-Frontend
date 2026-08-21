@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
-import { X, Loader2, Sparkles, AlertCircle, RefreshCw, ZoomIn, Zap, CheckCircle2, ArrowRight, ArrowLeft } from "lucide-react"
+import { X, Loader2, Sparkles, AlertCircle, RefreshCw, ZoomIn, Zap, CheckCircle2, ArrowRight, ArrowLeft, Volume2, VolumeX } from "lucide-react"
 import type { Dict } from "@/lib/dictionary"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -29,6 +29,7 @@ export function ArScanner({
   const [selectedIdea, setSelectedIdea] = useState<any | null>(null)
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(0)
   const [stepVerified, setStepVerified] = useState<boolean>(false)
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false)
 
   const stableCountRef = useRef(0)
   const hasSnappedRef = useRef(false)
@@ -81,8 +82,11 @@ export function ArScanner({
       if (stream) {
         stream.getTracks().forEach((track) => track.stop())
       }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel()
+      }
     }
-  }, [facingMode])
+  }, [facingMode, t.arCameraError])
 
   const handleZoomChange = async (newZoom: number) => {
     setZoomLevel(newZoom)
@@ -97,6 +101,26 @@ export function ArScanner({
         console.warn(e)
       }
     }
+  }
+
+  const handleSpeakStep = (stepText: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return
+
+    const synth = window.speechSynthesis
+    if (isSpeaking) {
+      synth.cancel()
+      setIsSpeaking(false)
+      return
+    }
+
+    const utterance = new SpeechSynthesisUtterance(stepText)
+    utterance.lang = lang === "vi" ? "vi-VN" : "en-US"
+    utterance.rate = 0.95
+    utterance.onend = () => setIsSpeaking(false)
+    utterance.onerror = () => setIsSpeaking(false)
+
+    setIsSpeaking(true)
+    synth.speak(utterance)
   }
 
   const captureAndLiveScan = useCallback(async () => {
@@ -164,6 +188,7 @@ export function ArScanner({
       const formData = new FormData()
       formData.append("file", imageFile)
       formData.append("items", uniqueItems)
+      formData.append("lang", lang)
 
       const res = await fetch(`${API_URL}/api/generate-diy-options`, {
         method: "POST",
@@ -245,6 +270,10 @@ export function ArScanner({
   }
 
   const handleResetScan = () => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel()
+    }
+    setIsSpeaking(false)
     hasSnappedRef.current = false
     stableCountRef.current = 0
     setDiyIdeas([])
@@ -260,7 +289,7 @@ export function ArScanner({
 
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-white text-[11px] font-medium">
           <ZoomIn className="size-3 text-emerald-400" />
-          <span>Zoom</span>
+          <span>{t.arZoom}</span>
           {[1,2,3].map(z => (
              <button key={z} onClick={() => handleZoomChange(z)} className={`px-2 py-0.5 rounded-full transition-colors ${zoomLevel === z ? 'bg-emerald-500 text-slate-950 font-bold' : 'hover:bg-white/20'}`}>{z}x</button>
           ))}
@@ -286,7 +315,7 @@ export function ArScanner({
           })}
 
           {isLoading && (!errorMessage) && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/80 text-white"><Loader2 className="size-6 animate-spin text-emerald-400" /><p className="text-xs">{t.arLoading}</p></div>}
-          {isGeneratingGemini && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/85 text-white"><Loader2 className="size-8 animate-spin text-amber-400" /><p className="text-xs font-medium">Gemini is generating DIY ideas...</p></div>}
+          {isGeneratingGemini && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/85 text-white"><Loader2 className="size-8 animate-spin text-amber-400" /><p className="text-xs font-medium">{t.arScanning}</p></div>}
           {errorMessage && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-slate-950/80 text-red-400 gap-2 text-xs"><AlertCircle className="size-8 text-red-500" /><span className="font-semibold text-slate-200">{errorMessage}</span></div>}
 
           {!selectedIdea && diyIdeas.length > 0 && (
@@ -294,9 +323,9 @@ export function ArScanner({
               <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-white/10">
                 <div className="flex items-center gap-1.5">
                   <Zap className="size-4 text-amber-400" />
-                  <h3 className="font-bold text-xs text-white">UpcycleDIY Ideas from Gemini:</h3>
+                  <h3 className="font-bold text-xs text-white">{t.suggestionsTitle}</h3>
                 </div>
-                <button onClick={handleResetScan} className="text-[10px] text-emerald-400 underline">Scan Again</button>
+                <button onClick={handleResetScan} className="text-[10px] text-emerald-400 underline">{t.arScanButton}</button>
               </div>
               <div className="space-y-2">
                 {diyIdeas.map((idea, index) => (
@@ -328,14 +357,23 @@ export function ArScanner({
             <div className="absolute bottom-3 left-3 right-3 z-20 rounded-xl bg-slate-950/95 border border-emerald-500/40 p-3 text-white text-[11px] shadow-2xl backdrop-blur-md">
               <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-white/10">
                 <div className="flex items-center gap-1.5">
-                  <button onClick={() => setSelectedIdea(null)} className="p-1 rounded bg-white/10 hover:bg-white/20 text-slate-300">
+                  <button onClick={() => { if (typeof window !== "undefined" && "speechSynthesis" in window) { window.speechSynthesis.cancel() }; setIsSpeaking(false); setSelectedIdea(null); }} className="p-1 rounded bg-white/10 hover:bg-white/20 text-slate-300">
                     <ArrowLeft className="size-3.5" />
                   </button>
                   <h3 className="font-bold text-xs text-emerald-400 line-clamp-1">{selectedIdea.title}</h3>
                 </div>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-medium">
-                  Step {currentStepIndex + 1} / {selectedIdea.steps?.length || 3}
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleSpeakStep(selectedIdea.steps?.[currentStepIndex] || "")}
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors ${isSpeaking ? 'bg-amber-500 text-slate-950' : 'bg-white/10 text-emerald-300 hover:bg-white/20'}`}
+                  >
+                    {isSpeaking ? <VolumeX className="size-3" /> : <Volume2 className="size-3" />}
+                    <span>{isSpeaking ? t.listening : t.listen}</span>
+                  </button>
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-medium">
+                    {t.stepLabel} {currentStepIndex + 1} / {selectedIdea.steps?.length || 3}
+                  </span>
+                </div>
               </div>
 
               <div className="space-y-2 my-2">
@@ -346,13 +384,18 @@ export function ArScanner({
                 <div className="flex items-center justify-between text-[10px]">
                   <span className={stepVerified ? "text-emerald-400 font-bold flex items-center gap-1" : "text-amber-400 flex items-center gap-1"}>
                     <CheckCircle2 className="size-3.5" />
-                    {stepVerified ? "Object detected! Step completed." : "Waiting for item in frame..."}
+                    {stepVerified ? "Object detected! Step completed." : t.arFrameHint}
                   </span>
                   
                   <div className="flex gap-1.5">
                     {currentStepIndex > 0 && (
                       <button 
-                        onClick={() => { setCurrentStepIndex(prev => prev - 1); setStepVerified(false) }}
+                        onClick={() => { 
+                          if (typeof window !== "undefined" && "speechSynthesis" in window) { window.speechSynthesis.cancel() }; 
+                          setIsSpeaking(false); 
+                          setCurrentStepIndex(prev => prev - 1); 
+                          setStepVerified(false) 
+                        }}
                         className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-medium"
                       >
                         Back
@@ -360,6 +403,8 @@ export function ArScanner({
                     )}
                     <button 
                       onClick={() => {
+                        if (typeof window !== "undefined" && "speechSynthesis" in window) { window.speechSynthesis.cancel() }
+                        setIsSpeaking(false)
                         if (selectedIdea.steps && currentStepIndex < selectedIdea.steps.length - 1) {
                           setCurrentStepIndex(prev => prev + 1)
                           setStepVerified(false)
@@ -392,7 +437,7 @@ export function ArScanner({
         <div className="z-30 flex items-center justify-between gap-2 bg-slate-950 px-3 py-2 border-t border-white/10">
           <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
             <Sparkles className="size-3.5 shrink-0 text-emerald-400" />
-            <span>{selectedIdea ? "YOLO AR Active Interaction Mode" : "Scanning objects via YOLO..."}</span>
+            <span>{selectedIdea ? t.arLiveGuidance : t.arScanning}</span>
           </div>
           <button onClick={onClose} className="rounded-lg bg-white/5 hover:bg-white/10 text-slate-200 font-medium px-3 py-1 text-[11px] transition-all border border-white/10">
             {t.arClose}
