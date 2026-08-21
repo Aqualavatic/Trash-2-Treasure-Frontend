@@ -36,7 +36,6 @@ export function ArScanner({
     }[]
   } | null>(null)
 
-  // State quản lý khi người dùng chọn một option DIY để bắt đầu hướng dẫn từng bước
   const [selectedIdea, setSelectedIdea] = useState<any | null>(null)
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(0)
   const [stepVerified, setStepVerified] = useState<boolean>(false)
@@ -146,18 +145,15 @@ export function ArScanner({
                   wasteType: result.waste_type,
                   confidence: result.confidence,
                   objects: result.objects || [],
-                  // Giữ lại ý tưởng đang chọn nếu người dùng đã bấm vào
                   diyIdeas: prev?.diyIdeas?.length ? prev.diyIdeas : (result.diy_ideas || [])
                 }))
 
-                // Nếu đang ở chế độ hướng dẫn từng bước, kiểm tra xem vật thể trước camera có khớp với yêu cầu của bước hiện tại không
+                // Kiểm tra tương tác bước hiện tại với vật thể YOLO phát hiện
                 if (selectedIdea && selectedIdea.steps && selectedIdea.steps[currentStepIndex]) {
                   const currentStepText = selectedIdea.steps[currentStepIndex].toLowerCase()
-                  // COCO detect object names trả về từ backend, kiểm tra xem có object nào khớp với từ khóa trong bước không
                   const detectedClasses = (result.objects || []).map((o: any) => o.waste_type.toLowerCase())
                   
-                  // Kiểm tra đơn giản: nếu vật thể quét được khớp với bước hiện tại -> Xác thực thành công
-                  const matched = detectedClasses.some((cls: string) => currentStepText.includes(cls) || cls.includes("scissors") || cls.includes("bottle") || cls.includes("book"));
+                  const matched = detectedClasses.some((cls: string) => currentStepText.includes(cls) || cls.includes("scissors") || cls.includes("bottle"));
                   if (matched) {
                     setStepVerified(true)
                   }
@@ -165,7 +161,7 @@ export function ArScanner({
               }
             }
           } catch (err) {
-            console.error("Lỗi kết nối AI Live:", err)
+            console.error("Lỗi kết nối YOLO AR:", err)
           } finally {
             setIsScanning(false)
           }
@@ -178,9 +174,10 @@ export function ArScanner({
 
   useEffect(() => {
     if (isLoading || errorMessage) return
+    // Rút ngắn thời gian quét xuống 2 giây nhờ tốc độ siêu nhanh của YOLO
     const interval = setInterval(() => {
       captureAndLiveScan()
-    }, 3000)
+    }, 2000)
     return () => clearInterval(interval)
   }, [isLoading, errorMessage, captureAndLiveScan])
 
@@ -206,7 +203,7 @@ export function ArScanner({
         <div className="relative flex-1 overflow-hidden bg-black w-full h-full flex items-center justify-center">
           <video ref={videoRef} playsInline muted className="h-full w-full object-cover" />
           
-          {/* Bounding Boxes */}
+          {/* Bounding Boxes từ YOLO-World / Roboflow */}
           {liveData?.objects && liveData.objects.map((obj, idx) => {
             const [ymin, xmin, ymax, xmax] = obj.box;
             return (
@@ -226,12 +223,12 @@ export function ArScanner({
           {isLoading && (!errorMessage) && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/80 text-white"><Loader2 className="size-6 animate-spin text-emerald-400" /><p className="text-xs">{t.arLoading}</p></div>}
           {errorMessage && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-slate-950/80 text-red-400 gap-2 text-xs"><AlertCircle className="size-8 text-red-500" /><span className="font-semibold text-slate-200">{errorMessage}</span></div>}
 
-          {/* GIAO DIỆN CHÍNH: NẾU CHƯA CHỌN Ý TƯỞNG -> HIỆN DANH SÁCH OPTION ĐỂ BẤM VÀO */}
+          {/* Chọn ý tưởng DIY */}
           {!selectedIdea && (!isLoading && !errorMessage && liveData) ? (
             <div className="absolute bottom-3 left-3 right-3 z-20 rounded-xl bg-slate-950/90 border border-white/15 p-3 text-white text-[11px] shadow-xl backdrop-blur-md max-h-[220px] overflow-y-auto">
               <div className="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-white/10">
                 <Zap className="size-4 text-amber-400" />
-                <h3 className="font-bold text-xs text-white">Chọn ý tưởng UpcycleDIY để bắt đầu:</h3>
+                <h3 className="font-bold text-xs text-white">Ý tưởng UpcycleDIY kết hợp từ YOLO:</h3>
               </div>
               <div className="space-y-2">
                 {liveData.diyIdeas.map((idea, index) => (
@@ -259,7 +256,7 @@ export function ArScanner({
             </div>
           ) : null}
 
-          {/* GIAO DIỆN HƯỚNG DẪN TỪNG BƯỚC KHI ĐÃ CHỌN 1 Ý TƯỞNG */}
+          {/* Hướng dẫn từng bước tương tác */}
           {selectedIdea && (
             <div className="absolute bottom-3 left-3 right-3 z-20 rounded-xl bg-slate-950/95 border border-emerald-500/40 p-3 text-white text-[11px] shadow-2xl backdrop-blur-md">
               <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-white/10">
@@ -279,11 +276,10 @@ export function ArScanner({
                   👉 {selectedIdea.steps?.[currentStepIndex] || "Thực hiện thao tác thủ công theo yêu cầu."}
                 </p>
 
-                {/* Trạng thái xác thực bằng COCO / AI */}
                 <div className="flex items-center justify-between text-[10px]">
                   <span className={stepVerified ? "text-emerald-400 font-bold flex items-center gap-1" : "text-amber-400 flex items-center gap-1"}>
                     <CheckCircle2 className="size-3.5" />
-                    {stepVerified ? "Đã nhận diện vật dụng! Có thể qua bước tiếp." : "Đang chờ bạn đưa vật dụng lên khung hình..."}
+                    {stepVerified ? "YOLO đã nhận diện vật dụng! Đã xong bước này." : "Đang quét vật dụng qua camera..."}
                   </span>
                   
                   <div className="flex gap-1.5">
@@ -301,7 +297,7 @@ export function ArScanner({
                           setCurrentStepIndex(prev => prev + 1);
                           setStepVerified(false);
                         } else {
-                          alert("Chúc mừng bạn đã hoàn thành dự án UpcycleDIY tuyệt vời này!");
+                          alert("🎉 Chúc mừng bạn đã hoàn thành xuất sắc sản phẩm UpcycleDIY!");
                           setSelectedIdea(null);
                         }
                       }}
@@ -330,7 +326,7 @@ export function ArScanner({
         <div className="z-30 flex items-center justify-between gap-2 bg-slate-950 px-3 py-2 border-t border-white/10">
           <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
             <Sparkles className="size-3.5 shrink-0 text-emerald-400" />
-            <span>{selectedIdea ? "Chế độ hướng dẫn tương tác AR Active" : t.arFrameHint}</span>
+            <span>{selectedIdea ? "Chế độ hướng dẫn tương tác YOLO AR Active" : t.arFrameHint}</span>
           </div>
           <button onClick={onClose} className="rounded-lg bg-white/5 hover:bg-white/10 text-slate-200 font-medium px-3 py-1 text-[11px] transition-all border border-white/10">
             {t.arClose}
