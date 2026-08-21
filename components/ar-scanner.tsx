@@ -30,7 +30,6 @@ export function ArScanner({
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(0)
   const [stepVerified, setStepVerified] = useState<boolean>(false)
 
-  // Bộ đếm ổn định để quyết định khi nào Snap gửi Gemini
   const stableCountRef = useRef(0)
   const hasSnappedRef = useRef(false)
 
@@ -100,7 +99,6 @@ export function ArScanner({
     }
   }
 
-  // 1. YOLO Real-time Scan để bắt bounding box và chờ ổn định
   const captureAndLiveScan = useCallback(async () => {
     if (!videoRef.current || isScanning || isLoading || hasSnappedRef.current || selectedIdea) return
     const video = videoRef.current
@@ -138,7 +136,6 @@ export function ArScanner({
                 setObjects(result.objects)
                 stableCountRef.current += 1
 
-                // Khi YOLO quét ổn định qua 2 khung hình liên tiếp -> Snap gửi sang Gemini 1 lần duy nhất
                 if (stableCountRef.current >= 2 && !hasSnappedRef.current) {
                   hasSnappedRef.current = true
                   await snapAndGenerateGeminiIdeas(file, result.objects)
@@ -160,7 +157,6 @@ export function ArScanner({
     }
   }, [isScanning, isLoading, selectedIdea])
 
-  // 2. Hàm Snap gửi ảnh sang Gemini tạo 3 ý tưởng DIY kèm bước thực hiện
   const snapAndGenerateGeminiIdeas = async (imageFile: File, detectedObjs: any[]) => {
     setIsGeneratingGemini(true)
     try {
@@ -187,7 +183,6 @@ export function ArScanner({
     }
   }
 
-  // 3. Logic "Cầm tay chỉ việc": Kiểm tra vật dụng user đưa lên có khớp với bước hiện tại không
   const checkInteractionStep = useCallback(async () => {
     if (!videoRef.current || !selectedIdea || isScanning || isLoading) return
     const video = videoRef.current
