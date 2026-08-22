@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
-import { X, Loader2, Sparkles, AlertCircle, RefreshCw, ZoomIn, Zap, CheckCircle2, ArrowRight, ArrowLeft, Volume2, VolumeX } from "lucide-react"
+import { X, Loader2, Sparkles, AlertCircle, RefreshCw, ZoomIn, Zap, CheckCircle2, ArrowRight, ArrowLeft, Volume2, VolumeX, ListChecks } from "lucide-react"
 import type { Dict } from "@/lib/dictionary"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -30,6 +30,10 @@ export function ArScanner({
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(0)
   const [stepVerified, setStepVerified] = useState<boolean>(false)
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false)
+  
+  // State quản lý hiển thị popup danh sách vật phẩm & dụng cụ
+  const [showItemsModal, setShowItemsModal] = useState<boolean>(false)
+  const [scannedItemsList, setScannedItemsList] = useState<string[]>([])
 
   const stableCountRef = useRef(0)
   const hasSnappedRef = useRef(false)
@@ -114,8 +118,19 @@ export function ArScanner({
     }
 
     const utterance = new SpeechSynthesisUtterance(stepText)
+    const voices = synth.getVoices()
+    const jarvisVoice = voices.find(v => 
+      (v.lang.includes("en-US") || v.lang.includes("en-GB")) && 
+      (v.name.toLowerCase().includes("male") || v.name.toLowerCase().includes("david") || v.name.toLowerCase().includes("george"))
+    ) || voices.find(v => v.lang.includes("en"))
+
+    if (jarvisVoice) {
+      utterance.voice = jarvisVoice
+    }
+
     utterance.lang = lang === "vi" ? "vi-VN" : "en-US"
-    utterance.rate = 0.95
+    utterance.rate = 0.9
+    utterance.pitch = 0.7
     utterance.onend = () => setIsSpeaking(false)
     utterance.onerror = () => setIsSpeaking(false)
 
@@ -162,7 +177,9 @@ export function ArScanner({
 
                 if (stableCountRef.current >= 1 && !hasSnappedRef.current) {
                   hasSnappedRef.current = true
-                  await snapAndGenerateGeminiIdeas(file, result.objects)
+                  const uniqueScanned = Array.from(new Set(result.objects.map((o: any) => o.waste_type))) as string[]
+                  setScannedItemsList(uniqueScanned)
+                  await snapAndGenerateGeminiIdeas(file, uniqueScanned)
                 }
               } else {
                 setObjects([])
@@ -181,13 +198,13 @@ export function ArScanner({
     }
   }, [isScanning, isLoading, selectedIdea])
 
-  const snapAndGenerateGeminiIdeas = async (imageFile: File, detectedObjs: any[]) => {
+  const snapAndGenerateGeminiIdeas = async (imageFile: File, uniqueScanned: string[]) => {
     setIsGeneratingGemini(true)
     try {
-      const uniqueItems = Array.from(new Set(detectedObjs.map(o => o.waste_type))).join(", ")
+      const itemsStr = uniqueScanned.join(", ")
       const formData = new FormData()
       formData.append("file", imageFile)
-      formData.append("items", uniqueItems)
+      formData.append("items", itemsStr)
       formData.append("lang", lang)
 
       const res = await fetch(`${API_URL}/api/generate-diy-options`, {
@@ -261,7 +278,7 @@ export function ArScanner({
       } else {
         captureAndLiveScan()
       }
-    }, 2000)
+    }, 1000)
     return () => clearInterval(interval)
   }, [isLoading, errorMessage, selectedIdea, captureAndLiveScan, checkInteractionStep])
 
@@ -279,6 +296,7 @@ export function ArScanner({
     setDiyIdeas([])
     setSelectedIdea(null)
     setObjects([])
+    setShowItemsModal(false)
   }
 
   return (
@@ -286,6 +304,17 @@ export function ArScanner({
       <div className="relative flex h-full max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-950 shadow-2xl">
         <button onClick={onClose} className="absolute top-4 right-4 z-30 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 transition-colors"><X className="size-4" /></button>
         <button onClick={toggleCamera} className="absolute top-4 left-4 z-30 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 transition-colors" title={t.arSwitchCamera}><RefreshCw className="size-4" /></button>
+
+        {/* Nút mở danh sách vật phẩm khi đã generate xong ý tưởng */}
+        {diyIdeas.length > 0 && (
+          <button 
+            onClick={() => setShowItemsModal(true)} 
+            className="absolute top-4 left-16 z-30 flex items-center gap-1 rounded-full bg-emerald-500/80 hover:bg-emerald-500 text-slate-950 px-3 py-1.5 text-xs font-bold transition-all shadow-lg"
+          >
+            <ListChecks className="size-3.5" />
+            <span>Items & Materials</span>
+          </button>
+        )}
 
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-white text-[11px] font-medium">
           <ZoomIn className="size-3 text-emerald-400" />
@@ -317,6 +346,73 @@ export function ArScanner({
           {isLoading && (!errorMessage) && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/80 text-white"><Loader2 className="size-6 animate-spin text-emerald-400" /><p className="text-xs">{t.arLoading}</p></div>}
           {isGeneratingGemini && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/85 text-white"><Loader2 className="size-8 animate-spin text-amber-400" /><p className="text-xs font-medium">{t.arScanning}</p></div>}
           {errorMessage && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-slate-950/80 text-red-400 gap-2 text-xs"><AlertCircle className="size-8 text-red-500" /><span className="font-semibold text-slate-200">{errorMessage}</span></div>}
+
+          {/* Modal popup hiển thị 2 danh sách: Vật scan được & Vật liệu cần chuẩn bị */}
+          {showItemsModal && (
+            <div className="absolute inset-0 z-40 bg-slate-950/90 backdrop-blur-md p-4 flex flex-col justify-between text-white animate-in fade-in duration-200">
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <ListChecks className="size-5 text-emerald-400" />
+                  <h3 className="font-bold text-sm">Project Materials Summary</h3>
+                </div>
+                <button onClick={() => setShowItemsModal(false)} className="rounded-full bg-white/10 p-1.5 hover:bg-white/20"><X className="size-4" /></button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto py-3 space-y-4 text-xs">
+                {/* Phần 1: Danh sách vật scan được */}
+                <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                  <h4 className="font-bold text-emerald-400 mb-2 flex items-center gap-1.5">
+                    <span>📷</span> 1. Danh sách vật thể quét được từ Camera
+                  </h4>
+                  {scannedItemsList.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {scannedItemsList.map((item, idx) => (
+                        <span key={idx} className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-1 rounded-lg font-medium text-[11px]">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-slate-400 italic">Chưa có vật thể nào được ghi nhận.</p>
+                  )}
+                </div>
+
+                {/* Phần 2: Danh sách vật liệu cần chuẩn bị cho ý tưởng đang chọn hoặc tổng hợp */}
+                <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                  <h4 className="font-bold text-amber-400 mb-2 flex items-center gap-1.5">
+                    <span>🛠️</span> 2. Danh sách vật liệu/dụng cụ cần chuẩn bị
+                  </h4>
+                  {selectedIdea ? (
+                    <ul className="list-disc list-inside space-y-1 text-slate-200">
+                      {selectedIdea.materials?.map((mat: string, idx: number) => (
+                        <li key={idx}>{mat}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="space-y-3">
+                      {diyIdeas.map((idea, idx) => (
+                        <div key={idx} className="border-b border-white/5 pb-2 last:border-0">
+                          <p className="font-semibold text-amber-300 mb-1">{idx + 1}. {idea.title}</p>
+                          <ul className="list-disc list-inside space-y-0.5 text-slate-300 pl-2">
+                            {idea.materials?.map((m: string, mIdx: number) => (
+                              <li key={mIdx}>{m}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setShowItemsModal(false)}
+                className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl transition-all shadow-lg text-xs"
+              >
+                Quay lại màn hình AR
+              </button>
+            </div>
+          )}
 
           {!selectedIdea && diyIdeas.length > 0 && (
             <div className="absolute bottom-3 left-3 right-3 z-20 rounded-xl bg-slate-950/90 border border-white/15 p-3 text-white text-[11px] shadow-xl backdrop-blur-md max-h-[220px] overflow-y-auto">
